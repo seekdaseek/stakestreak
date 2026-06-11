@@ -166,4 +166,5 @@ app.post('/pot/:id/freeze', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/dbg',(req,res)=>{console.log('PHONE:',req.query.m);res.json({ok:1})});
 app.listen(3001, () => console.log('stakestreak on 3001, treasury:', treasury.publicKey.toBase58()));

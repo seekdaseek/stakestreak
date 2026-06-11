@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "811080849000",
+    "firebase_url": "https://stakestreak-480b4-default-rtdb.firebaseio.com",
+    "project_id": "stakestreak-480b4",
+    "storage_bucket": "stakestreak-480b4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:811080849000:android:b32453e7788206a6260ddd",
+        "android_client_info": {
+          "package_name": "com.stakestreak.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBR4pDvkzn--ac0MFBewkwWN5_uRlZMIag"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

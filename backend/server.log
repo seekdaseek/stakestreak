@@ -1,0 +1,20 @@
+stakestreak on 3001, treasury: FXpfE4xFNM3djJ9bxEz7iT7hzpMKSeYGXka1DFmxBywt
+PHONE: connect start
+PHONE: transact entered
+PHONE: authorized NRAKSuUJ
+PHONE: pubkey 4a8o45skRPcyjAdyR8yES215Swvh8uTpZD6KLarhxCJ7
+PHONE: connect start
+PHONE: transact entered
+PHONE: authorized NRAKSuUJ
+PHONE: pubkey 4a8o45skRPcyjAdyR8yES215Swvh8uTpZD6KLarhxCJ7
+PHONE: wallet resolved, navigating
+PHONE: navigate called
+PHONE: creating pot
+PHONE: pot created, depositing
+PHONE: CREATE CATCH: failed to get recent blockhash: Invariant Violation: TurboModuleRegistry.getEnforcing(...): 'RNGetRandomValues' could not be found. Verify that a module by this name is registered in the native binary.Bridgeless mode: false. TurboModule interop: false. Modules loaded: {"NativeModules":["HeadlessJsTaskSupport","UIManager","PlatformConstants","DeviceInfo","DeviceEventManager","RNCAsyncStorage","Timing","BlobModule","NativeAnimatedModule","SoundManager","I18nManager","RNCSafeAreaContext","IntentAndroid","Networking","SolanaMobileWalletAdapter","DialogManagerAndroid"],"TurboModules":[],"NotFound":["NativePerformanceCxx","NativePerformanceObserverCxx","RedBox","BugReporting","PlatformLocalStorage","RNC_AsyncSQLiteDBStorage","FrameRateLogger","KeyboardObserver","LinkingManager","RNGetRandomValues"]}
+PHONE: creating pot
+PHONE: pot created, depositing
+PHONE: CREATE CATCH: failed to get recent blockhash: Invariant Violation: TurboModuleRegistry.getEnforcing(...): 'RNGetRandomValues' could not be found. Verify that a module by this name is registered in the native binary.Bridgeless mode: false. TurboModule interop: false. Modules loaded: {"NativeModules":["HeadlessJsTaskSupport","UIManager","PlatformConstants","DeviceInfo","DeviceEventManager","RNCAsyncStorage","Timing","BlobModule","NativeAnimatedModule","SoundManager","I18nManager","RNCSafeAreaContext","IntentAndroid","Networking","SolanaMobileWalletAdapter","DialogManagerAndroid"],"TurboModules":[],"NotFound":["NativePerformanceCxx","NativePerformanceObserverCxx","RedBox","BugReporting","PlatformLocalStorage","RNC_AsyncSQLiteDBStorage","FrameRateLogger","KeyboardObserver","LinkingManager","RNGetRandomValues"]}
+PHONE: creating pot
+PHONE: pot created, depositing
+PHONE: deposited sig=4QbvfkKv7aMa
