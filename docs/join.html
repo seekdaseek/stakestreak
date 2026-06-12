@@ -1,0 +1,28 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a StakeStreak pot</title>
+<style>body{font-family:-apple-system,sans-serif;max-width:480px;margin:40px auto;padding:0 20px;color:#2B2118;background:#FFF4EC;text-align:center;line-height:1.6}
+h1{color:#FF5A36}.code{font-size:26px;font-weight:900;background:#FFF;border:2px dashed #FF5A36;border-radius:16px;padding:14px;margin:18px 0;letter-spacing:2px}
+.btn{display:inline-block;background:#FF5A36;color:#FFF;font-weight:800;padding:14px 28px;border-radius:16px;text-decoration:none;margin:8px 4px;border:none;font-size:16px;cursor:pointer}
+.meta{color:#8A7E72}.copied{color:#FF5A36;font-weight:700;min-height:22px;margin:6px 0}</style></head><body>
+<h1>&#x1F525; You're invited</h1>
+<p>A friend challenged you to a StakeStreak pot: stake SOL, check in daily, survivors split the quitters' stakes.</p>
+<div class="code" id="code"></div>
+<div class="copied" id="copied"></div>
+<a class="btn" id="openBtn" href="#">Open in StakeStreak</a>
+<button class="btn" onclick="copyCode(true)">Copy code</button>
+<p class="meta">No app yet? Get StakeStreak from the Solana dApp Store on your Seeker, connect wallet, then paste the code in "Have an invite code?"</p>
+<script>
+var p = new URLSearchParams(location.search).get('p') || '';
+document.getElementById('code').innerText = p;
+document.getElementById('openBtn').href = 'stakestreak://join?p=' + encodeURIComponent(p);
+function copyCode(manual){
+  if(!p) return;
+  navigator.clipboard.writeText(p).then(function(){
+    document.getElementById('copied').innerText = 'Code copied \u2713';
+  }).catch(function(){
+    if(manual) document.getElementById('copied').innerText = 'Long-press the code to copy';
+  });
+}
+copyCode(false);
+if(p){ setTimeout(function(){ location.href = 'stakestreak://join?p=' + encodeURIComponent(p); }, 400); }
+</script></body></html>
