@@ -2,3 +2,6 @@ node_modules/
 treasury.txt
 *.db
 .env
+*.keystore
+!app/android/app/debug.keystore
+backend/treasury.txt

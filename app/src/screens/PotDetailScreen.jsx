@@ -1,14 +1,16 @@
 import React, {useState, useCallback} from 'react';
 import {View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Share} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {getPot, checkinPot, startPot, buyFreeze} from '../services/api';
+import {getPot, checkinPot, startPot, buyFreeze, refundPot} from '../services/api';
 import {getSavedWallet, depositToTreasury} from '../services/wallet';
+import {useToast} from '../components/Toast';
 
 export default function PotDetailScreen({route}) {
   const {potId} = route.params;
   const [pot, setPot] = useState(null);
   const [wallet, setWallet] = useState(null);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   const load = async () => {
     setWallet(await getSavedWallet());
@@ -25,16 +27,16 @@ export default function PotDetailScreen({route}) {
     setBusy(true);
     try {
       const r = await checkinPot(potId, wallet);
-      Alert.alert('Checked in', 'Day ' + r.day + ' survived.');
+      toast('Day ' + (r.day + 1) + ' survived', 'Streak alive. See you tomorrow.', 'win');
       load();
-    } catch (e) { Alert.alert('Error', e.response?.data?.error || e.message); }
+    } catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
     setBusy(false);
   };
 
   const doStart = async () => {
     setBusy(true);
     try { await startPot(potId, wallet); load(); }
-    catch (e) { Alert.alert('Error', e.response?.data?.error || e.message); }
+    catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
     setBusy(false);
   };
 
@@ -43,17 +45,17 @@ export default function PotDetailScreen({route}) {
     try {
       const sig = await depositToTreasury('FXpfE4xFNM3djJ9bxEz7iT7hzpMKSeYGXka1DFmxBywt', 0.015);
       const r = await buyFreeze(potId, wallet, sig);
-      Alert.alert('Freeze applied', 'Day ' + r.coveredDay + ' covered. You are back in.');
+      toast('Back from the dead', 'Day ' + r.coveredDay + ' covered. Don\'t waste it.', 'win');
       load();
-    } catch (e) { Alert.alert('Error', e.response?.data?.error || e.message); }
+    } catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
     setBusy(false);
   };
 
   return (
     <View style={st.wrap}>
       <Text style={st.title}>#{pot.id}</Text>
-      <Text style={st.meta}>{pot.stake_lamports / 1e9} SOL stake · {pot.duration_days} days · {pot.status}{pot.day !== null ? ' · day ' + pot.day : ''}</Text>
-      <TouchableOpacity style={st.share} onPress={() => Share.share({message: 'Join my StakeStreak pot: ' + pot.id})}>
+      <Text style={st.meta}>{pot.stake_lamports / 1e9} SOL stake · {pot.duration_days} days · {pot.status}{pot.day !== null ? ' · day ' + (pot.day + 1) : ''}</Text>
+      <TouchableOpacity style={st.share} onPress={() => Share.share({message: 'Join my StakeStreak pot: https://seekdaseek.github.io/stakestreak/join.html?p=' + pot.id})}>
         <Text style={st.shareText}>Invite friends</Text>
       </TouchableOpacity>
 
@@ -75,6 +77,17 @@ export default function PotDetailScreen({route}) {
         </TouchableOpacity>
       )}
 
+      {pot.status === 'open' && me?.deposit_sig !== undefined && (
+        <TouchableOpacity style={[st.refund, busy && st.dim]} disabled={busy} onPress={async () => {
+          setBusy(true);
+          try { const r = await refundPot(potId, wallet); toast('Refunded', r.refunded + ' SOL returned to your wallet.'); load(); }
+          catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
+          setBusy(false);
+        }}>
+          <Text style={st.refundText}>Leave pot & refund my stake</Text>
+        </TouchableOpacity>
+      )}
+
       <Text style={st.section}>Members</Text>
       <FlatList
         data={pot.members}
@@ -91,19 +104,21 @@ export default function PotDetailScreen({route}) {
 }
 
 const st = StyleSheet.create({
-  wrap: {flex: 1, backgroundColor: '#0d0d14', padding: 16},
-  title: {color: '#fff', fontSize: 24, fontWeight: '700'},
-  meta: {color: '#aaa', marginTop: 6},
+  wrap: {flex: 1, backgroundColor: '#FFF4EC', padding: 16},
+  title: {color: '#E8431F', fontSize: 28, fontWeight: '900'},
+  meta: {color: '#8A7E72', marginTop: 6},
   share: {marginTop: 10},
-  shareText: {color: '#9f7aea', fontWeight: '600'},
-  cta: {backgroundColor: '#9f7aea', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 16},
-  freeze: {backgroundColor: '#2b6cb0', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 16},
-  ctaText: {color: '#fff', fontWeight: '700', fontSize: 16},
+  shareText: {color: '#FF5A36', fontWeight: '600'},
+  cta: {backgroundColor: '#FF5A36', borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 16},
+  freeze: {backgroundColor: '#FF8C42', borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 16},
+  ctaText: {color: '#FFFFFF', fontWeight: '800', fontSize: 16},
   dim: {opacity: 0.5},
-  section: {color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 24, marginBottom: 8},
-  row: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1a1a26'},
-  addr: {color: '#ddd'},
+  refund: {marginTop: 14, alignItems: 'center', padding: 12},
+  refundText: {color: '#8A7E72', fontWeight: '600', textDecorationLine: 'underline'},
+  section: {color: '#E8431F', fontSize: 18, fontWeight: '900', marginTop: 24, marginBottom: 8},
+  row: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#FFFFFF'},
+  addr: {color: '#2B2118'},
   status: {fontWeight: '600'},
-  green: {color: '#48bb78'},
-  red: {color: '#f56565'},
+  green: {color: '#7BC950'},
+  red: {color: '#FF3B6B'},
 });

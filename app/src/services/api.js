@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // DEV: Mac local IP so the Seeker phone can reach it over WiFi.
 // Replace 192.168.x.x with your Mac IP before testing on device.
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = 'http://167.233.69.154/stakestreak';
 
 const api = axios.create({ baseURL: BASE_URL, timeout: 10000 });
 
@@ -23,3 +23,6 @@ export const buyFreeze = (potId, wallet, sig) =>
 
 export const getPot = (potId) =>
   api.get('/pot/' + potId).then(r => r.data);
+
+export const refundPot = (potId, wallet) =>
+  api.post('/pot/' + potId + '/refund', { wallet }).then(r => r.data);

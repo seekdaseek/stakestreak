@@ -167,4 +167,37 @@ app.post('/pot/:id/freeze', async (req, res) => {
 });
 
 app.get('/dbg',(req,res)=>{console.log('PHONE:',req.query.m);res.json({ok:1})});
+
+// refund deposit if pot never started
+app.post('/pot/:id/refund', async (req, res) => {
+  const { wallet } = req.body;
+  const pot = db.prepare("SELECT * FROM pots WHERE id=? AND status='open'").get(req.params.id);
+  if (!pot) return res.status(400).json({ error: 'pot not refundable (already started or settled)' });
+  const m = db.prepare("SELECT * FROM members WHERE pot_id=? AND wallet=? AND status='active' AND deposit_sig IS NOT NULL").get(pot.id, wallet);
+  if (!m) return res.status(400).json({ error: 'no refundable deposit' });
+  try {
+    const tx = new Transaction().add(SystemProgram.transfer({
+      fromPubkey: treasury.publicKey,
+      toPubkey: new PublicKey(wallet),
+      lamports: pot.stake_lamports
+    }));
+    const sig = await sendAndConfirmTransaction(conn, tx, [treasury]);
+    db.prepare("UPDATE members SET status='refunded' WHERE pot_id=? AND wallet=?").run(pot.id, wallet);
+    db.prepare('INSERT INTO payouts (pot_id, wallet, lamports, sig) VALUES (?,?,?,?)').run(pot.id, wallet, pot.stake_lamports, sig);
+    res.json({ ok: true, refunded: pot.stake_lamports / 1e9, sig });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// delete account: remove user data where not in active pots
+app.post('/account/delete', (req, res) => {
+  const { wallet } = req.body;
+  if (!wallet) return res.status(400).json({ error: 'wallet required' });
+  const active = db.prepare("SELECT COUNT(*) c FROM members m JOIN pots p ON p.id=m.pot_id WHERE m.wallet=? AND m.status='active' AND p.status='running'").get(wallet).c;
+  if (active > 0) return res.status(400).json({ error: 'You are in ' + active + ' running pot(s). Finish or get eliminated first - stakes cannot be abandoned mid-game.' });
+  db.prepare("DELETE FROM members WHERE wallet=? AND pot_id IN (SELECT id FROM pots WHERE status IN ('settled'))").run(wallet);
+  db.prepare("DELETE FROM checkins WHERE wallet=?").run(wallet);
+  res.json({ ok: true, note: 'Off-chain records deleted. On-chain transactions are permanent by nature of the blockchain. Settlement records retained for accounting as permitted by law.' });
+});
+
 app.listen(3001, () => console.log('stakestreak on 3001, treasury:', treasury.publicKey.toBase58()));
