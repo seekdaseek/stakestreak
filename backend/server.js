@@ -165,7 +165,7 @@ app.get('/pot/:id', (req, res) => {
   const pot = db.prepare('SELECT * FROM pots WHERE id=?').get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no pot' });
   const members = db.prepare('SELECT wallet, status FROM members WHERE pot_id=?').all(pot.id);
-  res.json({ ...pot, day: pot.start_ts ? potDay(pot) : null, members });
+  res.json({ ...pot, day: pot.start_ts ? potDay(pot) : null, members, depositTo: treasury.publicKey.toBase58(), checkinLamports: CHECKIN_LAMPORTS });
 });
 
 

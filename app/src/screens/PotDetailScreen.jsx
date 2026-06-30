@@ -2,7 +2,7 @@ import React, {useState, useCallback} from 'react';
 import {View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Share} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {getPot, checkinPot, startPot, buyFreeze, refundPot} from '../services/api';
-import {getSavedWallet, depositToTreasury} from '../services/wallet';
+import {getSavedWallet, depositToTreasury, checkinTx} from '../services/wallet';
 import {useToast} from '../components/Toast';
 
 export default function PotDetailScreen({route}) {
@@ -26,7 +26,8 @@ export default function PotDetailScreen({route}) {
   const doCheckin = async () => {
     setBusy(true);
     try {
-      const r = await checkinPot(potId, wallet);
+      const sig = await checkinTx(pot.depositTo);
+      const r = await checkinPot(potId, wallet, sig);
       toast('Day ' + (r.day + 1) + ' survived', 'Streak alive. See you tomorrow.', 'win');
       load();
     } catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
@@ -43,7 +44,7 @@ export default function PotDetailScreen({route}) {
   const doFreeze = async () => {
     setBusy(true);
     try {
-      const sig = await depositToTreasury('FXpfE4xFNM3djJ9bxEz7iT7hzpMKSeYGXka1DFmxBywt', 0.015);
+      const sig = await depositToTreasury(pot.depositTo, 0.015);
       const r = await buyFreeze(potId, wallet, sig);
       toast('Back from the dead', 'Day ' + r.coveredDay + ' covered. Don\'t waste it.', 'win');
       load();

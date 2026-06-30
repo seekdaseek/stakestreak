@@ -38,3 +38,21 @@ export async function depositToTreasury(treasuryAddress, amountSol) {
   await connection.confirmTransaction(sig, 'confirmed');
   return sig;
 }
+
+
+// v2: on-chain check-in. Sends a tiny proof transfer to treasury, returns sig.
+export const CHECKIN_LAMPORTS = 5000;
+export async function checkinTx(treasuryAddress) {
+  const {SystemProgram, Transaction, PublicKey: PK} = require('@solana/web3.js');
+  const sig = await transact(async (mwa) => {
+    const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://seekdaseek.github.io', icon: 'favicon.ico' } });
+    const payer = new PK(Buffer.from(auth.accounts[0].address, 'base64'));
+    const { blockhash } = await connection.getLatestBlockhash();
+    const tx = new Transaction({ recentBlockhash: blockhash, feePayer: payer });
+    tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: new PK(treasuryAddress), lamports: CHECKIN_LAMPORTS }));
+    const signed = await mwa.signTransactions({ transactions: [tx] });
+    return await connection.sendRawTransaction(signed[0].serialize());
+  });
+  await connection.confirmTransaction(sig, 'confirmed');
+  return sig;
+}
