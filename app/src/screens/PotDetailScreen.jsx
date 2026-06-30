@@ -10,6 +10,8 @@ export default function PotDetailScreen({route}) {
   const [pot, setPot] = useState(null);
   const [wallet, setWallet] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const toast = useToast();
 
   const load = async () => {
@@ -54,17 +56,33 @@ export default function PotDetailScreen({route}) {
 
   return (
     <View style={st.wrap}>
-      <Text style={st.title}>#{pot.id}</Text>
-      <Text style={st.meta}>{pot.stake_lamports / 1e9} SOL stake · {pot.duration_days} days · {pot.status}{pot.day !== null ? ' · day ' + (pot.day + 1) : ''}</Text>
-      <TouchableOpacity style={st.share} onPress={() => Share.share({message: 'Join my StakeStreak pot: https://seekdaseek.github.io/stakestreak/join.html?p=' + pot.id})}>
+      {pot.rule_text ? <Text style={st.rule}>“{pot.rule_text}”</Text> : null}
+      <Text style={st.meta}>{pot.stake_lamports / 1e9} SOL stake · {pot.duration_days} days</Text>
+      {(() => {
+        const filling = pot.status === 'open' || (pot.status === 'running' && !pot.locked);
+        if (pot.status === 'settled') return <Text style={st.over}>POT OVER</Text>;
+        if (pot.status === 'dead') return <Text style={st.over}>POT DIDN’T FILL — REFUNDED</Text>;
+        if (filling && pot.fillEndsAt) {
+          const ms = pot.fillEndsAt - now;
+          if (ms > 0) {
+            const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), sec = Math.floor((ms % 60000) / 1000);
+            return <Text style={st.countdown}>{(pot.activeCount || pot.members.length)}/3 to start · {h}h {m}m {sec}s left to join</Text>;
+          }
+          return <Text style={st.meta}>Join window closed</Text>;
+        }
+        if (pot.status === 'running' && pot.day !== null) return <Text style={st.meta}>Day {Math.min(pot.day + 1, pot.duration_days)} of {pot.duration_days}</Text>;
+        return <Text style={st.meta}>{pot.status}</Text>;
+      })()}
+      <TouchableOpacity style={st.share} onPress={() => Share.share({message: (pot.rule_text ? '“' + pot.rule_text + '” — ' : '') + 'Join my StakeStreak pot: https://seekdaseek.github.io/stakestreak/join.html?p=' + pot.id})}>
         <Text style={st.shareText}>Invite friends</Text>
       </TouchableOpacity>
-
-      {pot.status === 'open' && isCreator && (
-        <TouchableOpacity style={[st.cta, busy && st.dim]} disabled={busy} onPress={doStart}>
-          <Text style={st.ctaText}>Start Pot ({pot.members.length} joined)</Text>
-        </TouchableOpacity>
-      )}
+      {(pot.status === 'open' || pot.status === 'running') && me && (() => {
+        const stake = pot.stake_lamports / 1e9;
+        const n = pot.activeCount || pot.members.length;
+        const rake = (pot.rakeBps || 300) / 10000;
+        const pool = n * stake * (1 - rake);
+        return <Text style={st.win}>You staked {stake} SOL · if half drop out you could win ~{(pool / Math.max(1, Math.ceil(n/2))).toFixed(3)} SOL</Text>;
+      })()}
 
       {pot.status === 'running' && me?.status === 'active' && (
         <TouchableOpacity style={[st.cta, busy && st.dim]} disabled={busy} onPress={doCheckin}>
@@ -108,6 +126,10 @@ const st = StyleSheet.create({
   wrap: {flex: 1, backgroundColor: '#FFF4EC', padding: 16},
   title: {color: '#E8431F', fontSize: 28, fontWeight: '900'},
   meta: {color: '#8A7E72', marginTop: 6},
+  rule: {color: '#2B2118', fontSize: 20, fontWeight: '800', marginTop: 8, lineHeight: 26},
+  countdown: {color: '#E8431F', fontWeight: '800', marginTop: 8, fontSize: 15},
+  over: {color: '#E8431F', fontWeight: '900', fontSize: 20, marginTop: 8, letterSpacing: 1},
+  win: {color: '#7BC950', fontWeight: '700', marginTop: 12, fontSize: 14, lineHeight: 20},
   share: {marginTop: 10},
   shareText: {color: '#FF5A36', fontWeight: '600'},
   cta: {backgroundColor: '#FF5A36', borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 16},
