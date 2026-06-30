@@ -11,6 +11,8 @@ export default function PotListScreen({navigation, route}) {
   const [refreshing, setRefreshing] = useState(false);
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const toast = useToast();
 
   useEffect(() => {
@@ -28,7 +30,8 @@ export default function PotListScreen({navigation, route}) {
     setJoining(true);
     try {
       const pot = await getPot(id);
-      if (pot.status !== 'open') throw new Error('This pot already started');
+      if (pot.status === 'settled' || pot.status === 'dead') throw new Error('This pot is finished');
+      if (pot.locked) throw new Error('Join window closed');
       const wallet = await getSavedWallet();
       if (pot.members.some(m => m.wallet === wallet)) throw new Error('You are already in this pot');
       const stake = pot.stake_lamports / 1e9;
@@ -78,9 +81,19 @@ export default function PotListScreen({navigation, route}) {
         ListEmptyComponent={<Text style={st.empty}>1. Create a pot  2. Friends join\n3. Check in daily  4. Survivors win \uD83D\uDD25</Text>}
         renderItem={({item}) => (
           <TouchableOpacity style={st.card} onPress={() => navigation.navigate('PotDetail', {potId: item.id})}>
-            <Text style={st.potId}>#{item.id}</Text>
+            {item.rule_text ? <Text style={st.cardRule}>“{item.rule_text}”</Text> : <Text style={st.potId}>#{item.id}</Text>}
             <Text style={st.hero}>{item.stake_lamports * item.members.length / 1e9} SOL</Text>
-            <Text style={st.meta}>{item.duration_days} days · {item.status}{item.day !== null ? ' · day ' + (item.day + 1) : ''}</Text>
+            {(() => {
+              const filling = item.status === 'open' || (item.status === 'running' && !item.locked);
+              if (item.status === 'settled') return <Text style={st.metaOver}>POT OVER</Text>;
+              if (item.status === 'dead') return <Text style={st.metaOver}>didn’t fill — refunded</Text>;
+              if (filling && item.fillEndsAt) {
+                const ms = item.fillEndsAt - now;
+                if (ms > 0) { const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000); return <Text style={st.metaUrgent}>{(item.activeCount||item.members.length)}/3 · {h}h {m}m left to join</Text>; }
+                return <Text style={st.meta}>locking...</Text>;
+              }
+              return <Text style={st.meta}>{item.duration_days} days · day {Math.min((item.day||0)+1, item.duration_days)} of {item.duration_days}</Text>;
+            })()}
             <Text style={st.flames}>{item.day !== null ? '\uD83D\uDD25'.repeat(Math.min(item.day + 1, 14)) + '\u26AA'.repeat(Math.max(0, Math.min(item.duration_days, 14) - item.day - 1)) : ''}</Text>
             <Text style={st.meta}>{item.members.filter(m => m.status === 'active').length} alive · {item.members.filter(m => m.status === 'eliminated').length} cooked 💀</Text>
           </TouchableOpacity>
@@ -108,7 +121,9 @@ const st = StyleSheet.create({
   potId: {color: '#FF5A36', fontWeight: '800', fontSize: 16},
   meta: {color: '#8A7E72', marginTop: 4, fontSize: 14, fontWeight: '600'},
   flames: {fontSize: 13, marginTop: 6, letterSpacing: 1},
-  flames: {fontSize: 13, marginTop: 6, letterSpacing: 1},
+  cardRule: {color: '#2B2118', fontWeight: '800', fontSize: 16, marginBottom: 2},
+  metaUrgent: {color: '#E8431F', marginTop: 4, fontSize: 14, fontWeight: '800'},
+  metaOver: {color: '#8A7E72', marginTop: 4, fontSize: 14, fontWeight: '800', letterSpacing: 0.5},
   cta: {backgroundColor: '#FF5A36', borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 8},
   ctaText: {color: '#FFFFFF', fontWeight: '800', fontSize: 16},
 });
