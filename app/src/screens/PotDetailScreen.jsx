@@ -30,7 +30,8 @@ export default function PotDetailScreen({route}) {
     try {
       const sig = await checkinTx(pot.depositTo);
       const r = await checkinPot(potId, wallet, sig);
-      toast('Day ' + (r.day + 1) + ' survived', 'Streak alive. See you tomorrow.', 'win');
+      const msg = r.slotsNeeded > 1 ? ('Check-in ' + r.slotsDone + ' of ' + r.slotsNeeded + ' done today.') : 'Streak alive. See you tomorrow.';
+      toast(r.slotsDone >= r.slotsNeeded ? 'Day ' + (r.day + 1) + ' secured' : 'Checked in', msg, 'win');
       load();
     } catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
     setBusy(false);
@@ -57,6 +58,15 @@ export default function PotDetailScreen({route}) {
   return (
     <View style={st.wrap}>
       {pot.rule_text ? <Text style={st.rule}>“{pot.rule_text}”</Text> : null}
+      {pot.slots && pot.slots.length > 0 ? (
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8}}>
+          {pot.slots.map((mins, i) => {
+            const label = String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0');
+            return <View key={i} style={st.slotChip}><Text style={st.slotChipText}>{label}</Text></View>;
+          })}
+          <Text style={st.slotNote}>each ±{pot.graceMin || 10}min, your time</Text>
+        </View>
+      ) : null}
       <Text style={st.meta}>{pot.stake_lamports / 1e9} SOL stake · {pot.duration_days} days</Text>
       {(() => {
         const filling = pot.status === 'open' || (pot.status === 'running' && !pot.locked);
@@ -127,6 +137,9 @@ const st = StyleSheet.create({
   title: {color: '#E8431F', fontSize: 28, fontWeight: '900'},
   meta: {color: '#8A7E72', marginTop: 6},
   rule: {color: '#2B2118', fontSize: 20, fontWeight: '800', marginTop: 8, lineHeight: 26},
+  slotChip: {backgroundColor: '#FFE3D6', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6},
+  slotChipText: {color: '#E8431F', fontWeight: '800', fontSize: 13},
+  slotNote: {color: '#8A7E72', fontSize: 12, alignSelf: 'center'},
   countdown: {color: '#E8431F', fontWeight: '800', marginTop: 8, fontSize: 15},
   over: {color: '#E8431F', fontWeight: '900', fontSize: 20, marginTop: 8, letterSpacing: 1},
   win: {color: '#7BC950', fontWeight: '700', marginTop: 12, fontSize: 14, lineHeight: 20},

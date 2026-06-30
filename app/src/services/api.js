@@ -9,8 +9,8 @@ const api = axios.create({ baseURL: BASE_URL, timeout: 10000 });
 export const createPot = (creator, stakeSol, durationDays, opts = {}) =>
   api.post('/pot', { creator, stakeSol, durationDays, ...opts }).then(r => r.data);
 
-export const joinPot = (potId, wallet, sig) =>
-  api.post('/pot/' + potId + '/join', { wallet, sig }).then(r => r.data);
+export const joinPot = (potId, wallet, sig, tzOffset) =>
+  api.post('/pot/' + potId + '/join', { wallet, sig, tzOffset }).then(r => r.data);
 
 export const startPot = (potId, wallet) =>
   api.post('/pot/' + potId + '/start', { wallet }).then(r => r.data);
