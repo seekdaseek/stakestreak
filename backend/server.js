@@ -15,6 +15,10 @@ const treasury = Keypair.fromSecretKey(bs58.decode(secret));
 const RAKE_BPS = 300;
 const FREEZE_LAMPORTS = 15000000;
 const DAY_MS = 86400000;
+const CHECKIN_LAMPORTS = 5000;
+const LATE_JOIN_MS = 86400000;
+function dayFromBlockTime(pot, blockTimeSec){ if(!pot.start_ts) return -1; const diff = blockTimeSec*1000 - pot.start_ts; const GRACE = 120000; if (diff < -GRACE) return -1; if (diff < 0) return 0; return Math.floor(diff/DAY_MS); }
+function inWindow(pot, blockTimeSec){ if(pot.checkin_start_min==null||pot.checkin_end_min==null) return true; const d=new Date(blockTimeSec*1000); const min=d.getUTCHours()*60+d.getUTCMinutes(); const a=pot.checkin_start_min,b=pot.checkin_end_min; return a<=b ? (min>=a&&min<=b) : (min>=a||min<=b); }
 
 function potDay(pot) {
   return Math.floor((Date.now() - pot.start_ts) / DAY_MS);
@@ -22,12 +26,20 @@ function potDay(pot) {
 
 // create pot
 app.post('/pot', (req, res) => {
-  const { creator, stakeSol, durationDays } = req.body;
+  const { creator, stakeSol, durationDays, ruleText, checkinStartMin, checkinEndMin, maxMembers } = req.body;
   if (!creator || !stakeSol || !durationDays) return res.status(400).json({ error: 'missing fields' });
   if (durationDays < 3 || durationDays > 90) return res.status(400).json({ error: 'duration 3-90 days' });
+  if (stakeSol < 0.01) return res.status(400).json({ error: 'min stake 0.01 SOL' });
+  const win = (checkinStartMin != null || checkinEndMin != null);
+  if (win) {
+    if (checkinStartMin == null || checkinEndMin == null) return res.status(400).json({ error: 'both window bounds required' });
+    if (checkinStartMin < 0 || checkinStartMin > 1439 || checkinEndMin < 0 || checkinEndMin > 1439) return res.status(400).json({ error: 'window minutes 0-1439' });
+  }
+  if (maxMembers != null && (maxMembers < 3 || maxMembers > 100)) return res.status(400).json({ error: 'maxMembers 3-100' });
+  const rule = ruleText ? String(ruleText).slice(0,120) : null;
   const id = crypto.randomBytes(6).toString('hex');
-  db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days) VALUES (?,?,?,?)')
-    .run(id, creator, Math.round(stakeSol * 1e9), durationDays);
+  db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days, rule_text, checkin_start_min, checkin_end_min, max_members) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, creator, Math.round(stakeSol * 1e9), durationDays, rule, win?checkinStartMin:null, win?checkinEndMin:null, maxMembers||null);
   res.json({ potId: id, depositTo: treasury.publicKey.toBase58() });
 });
 
@@ -36,7 +48,9 @@ app.post('/pot/:id/join', async (req, res) => {
   const { wallet, sig } = req.body;
   const pot = db.prepare('SELECT * FROM pots WHERE id=?').get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no pot' });
-  if (pot.status !== 'open') return res.status(400).json({ error: 'pot not open' });
+  if (pot.status === 'settled') return res.status(400).json({ error: 'pot settled' });
+  if (pot.status === 'running' && (Date.now() - pot.start_ts) > LATE_JOIN_MS) return res.status(400).json({ error: 'join window closed' });
+  if (pot.max_members) { const cnt = db.prepare("SELECT COUNT(*) c FROM members WHERE pot_id=? AND status='active'").get(pot.id).c; if (cnt >= pot.max_members) return res.status(400).json({ error: 'pot full' }); }
   const dup = db.prepare('SELECT 1 FROM members WHERE deposit_sig=?').get(sig);
   if (dup) return res.status(400).json({ error: 'sig reused' });
   try {
@@ -51,7 +65,12 @@ app.post('/pot/:id/join', async (req, res) => {
     if (!ix) return res.status(400).json({ error: 'deposit not verified' });
     db.prepare('INSERT INTO members (pot_id, wallet, deposit_sig, status) VALUES (?,?,?,?)')
       .run(pot.id, wallet, sig, 'active');
-    res.json({ ok: true });
+    let autoStarted = false;
+    if (pot.status === 'open') {
+      const active = db.prepare("SELECT COUNT(*) c FROM members WHERE pot_id=? AND status='active'").get(pot.id).c;
+      if (active >= 3) { db.prepare("UPDATE pots SET status='running', start_ts=? WHERE id=?").run(Date.now(), pot.id); autoStarted = true; }
+    }
+    res.json({ ok: true, autoStarted });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -67,18 +86,32 @@ app.post('/pot/:id/start', (req, res) => {
 });
 
 // daily checkin
-app.post('/pot/:id/checkin', (req, res) => {
-  const { wallet } = req.body;
+app.post('/pot/:id/checkin', async (req, res) => {
+  const { wallet, sig } = req.body;
+  if (!wallet || !sig) return res.status(400).json({ error: 'wallet and sig required' });
   const pot = db.prepare("SELECT * FROM pots WHERE id=? AND status='running'").get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no running pot' });
   const m = db.prepare("SELECT * FROM members WHERE pot_id=? AND wallet=? AND status='active'").get(pot.id, wallet);
   if (!m) return res.status(400).json({ error: 'not active member' });
-  const day = potDay(pot);
-  if (day >= pot.duration_days) return res.status(400).json({ error: 'pot ended' });
+  const reused = db.prepare('SELECT 1 FROM checkins WHERE sig=?').get(sig) || db.prepare('SELECT 1 FROM members WHERE deposit_sig=?').get(sig) || db.prepare('SELECT 1 FROM payouts WHERE sig=?').get(sig);
+  if (reused) return res.status(400).json({ error: 'sig reused' });
   try {
-    db.prepare('INSERT INTO checkins (pot_id, wallet, day, ts) VALUES (?,?,?,?)').run(pot.id, wallet, day, Date.now());
-    res.json({ ok: true, day });
-  } catch (e) { res.status(400).json({ error: 'already checked in' }); }
+    const tx = await conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 });
+    if (!tx || tx.meta.err) return res.status(400).json({ error: 'tx not found/failed' });
+    const ix = tx.transaction.message.instructions.find(i => i.parsed && i.parsed.type === 'transfer' && i.parsed.info.destination === treasury.publicKey.toBase58() && i.parsed.info.source === wallet && i.parsed.info.lamports >= CHECKIN_LAMPORTS);
+    if (!ix) return res.status(400).json({ error: 'checkin payment not verified' });
+    const bt = tx.blockTime;
+    if (!bt) return res.status(400).json({ error: 'no blockTime yet, retry shortly' });
+    const day = dayFromBlockTime(pot, bt);
+    if (day < 0) return res.status(400).json({ error: 'pot not started' });
+    if (day >= pot.duration_days) return res.status(400).json({ error: 'pot ended' });
+    if (!inWindow(pot, bt)) return res.status(400).json({ error: 'outside check-in window' });
+    db.prepare('INSERT INTO checkins (pot_id, wallet, day, ts, sig) VALUES (?,?,?,?,?)').run(pot.id, wallet, day, Date.now(), sig);
+    res.json({ ok: true, day, verified: true });
+  } catch (e) {
+    if (String(e.message).includes('UNIQUE')) return res.status(400).json({ error: 'already checked in / sig used' });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // eliminate members who missed yesterday (cron calls this)
