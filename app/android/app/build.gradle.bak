@@ -80,7 +80,7 @@ android {
         applicationId "com.stakestreak.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
+        versionCode 1
         versionName "1.0"
     }
     signingConfigs {
@@ -90,6 +90,9 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+    }
+
+    signingConfigs {
         release {
             storeFile file('stakestreak-release.keystore')
             storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""

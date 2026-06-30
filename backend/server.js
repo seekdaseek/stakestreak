@@ -19,7 +19,26 @@ const DAY_MS = 86400000;
 const CHECKIN_LAMPORTS = 5000;
 const LATE_JOIN_MS = 86400000;
 function dayFromBlockTime(pot, blockTimeSec){ if(!pot.start_ts) return -1; const diff = blockTimeSec*1000 - pot.start_ts; const GRACE = 120000; if (diff < -GRACE) return -1; if (diff < 0) return 0; return Math.floor(diff/DAY_MS); }
-function inWindow(pot, blockTimeSec){ if(pot.checkin_start_min==null||pot.checkin_end_min==null) return true; const d=new Date(blockTimeSec*1000); const min=d.getUTCHours()*60+d.getUTCMinutes(); const a=pot.checkin_start_min,b=pot.checkin_end_min; return a<=b ? (min>=a&&min<=b) : (min>=a||min<=b); }
+const SLOT_GRACE_MIN = 10; // fixed 10-min grace per slot
+// parse a pot's slots: JSON array of minutes-into-local-day, e.g. [600,900] = 10:00 & 15:00. null/empty = anytime.
+function potSlots(pot){ try { const a = pot.checkin_slots ? JSON.parse(pot.checkin_slots) : null; return Array.isArray(a) && a.length ? a : null; } catch { return null; } }
+// given a tx blockTime (sec) and a member tz_offset (minutes, JS getTimezoneOffset convention: UTC = local + offset... we store -getTimezoneOffset so local = UTC + tz),
+// return which slot index it satisfies, or -1. If pot has no slots, returns 0 (anytime counts as slot 0).
+function matchSlot(pot, blockTimeSec, tzOffsetMin){
+  const slots = potSlots(pot);
+  if (!slots) return 0; // anytime pot: single implicit slot 0
+  const utcMin = Math.floor((blockTimeSec*1000) / 60000); // total minutes UTC
+  const localMin = utcMin + (tzOffsetMin || 0); // shift to member local
+  const minOfDay = ((localMin % 1440) + 1440) % 1440; // 0..1439 local minute-of-day
+  for (let i=0;i<slots.length;i++){
+    const target = slots[i];
+    let diff = minOfDay - target;
+    // handle wrap near midnight
+    if (diff > 720) diff -= 1440; if (diff < -720) diff += 1440;
+    if (Math.abs(diff) <= SLOT_GRACE_MIN) return i;
+  }
+  return -1;
+}
 
 function potDay(pot) {
   const d = Math.floor((Date.now() - pot.start_ts) / DAY_MS);
@@ -40,8 +59,13 @@ app.post('/pot', (req, res) => {
   if (maxMembers != null && (maxMembers < 3 || maxMembers > 100)) return res.status(400).json({ error: 'maxMembers 3-100' });
   const rule = ruleText ? String(ruleText).slice(0,120) : null;
   const id = crypto.randomBytes(6).toString('hex');
-  db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days, rule_text, checkin_start_min, checkin_end_min, max_members, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(id, creator, Math.round(stakeSol * 1e9), durationDays, rule, win?checkinStartMin:null, win?checkinEndMin:null, maxMembers||null, Date.now());
+  let slotsJson = null;
+  if (Array.isArray(req.body.checkinSlots) && req.body.checkinSlots.length) {
+    const cleaned = req.body.checkinSlots.map(n=>parseInt(n)).filter(n=>!isNaN(n)&&n>=0&&n<=1439).slice(0,4);
+    if (cleaned.length) slotsJson = JSON.stringify(cleaned);
+  }
+  db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days, rule_text, max_members, created_at, checkin_slots) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, creator, Math.round(stakeSol * 1e9), durationDays, rule, maxMembers||null, Date.now(), slotsJson);
   res.json({ potId: id, depositTo: treasury.publicKey.toBase58() });
 });
 
@@ -65,8 +89,8 @@ app.post('/pot/:id/join', async (req, res) => {
       i.parsed.info.lamports >= pot.stake_lamports
     );
     if (!ix) return res.status(400).json({ error: 'deposit not verified' });
-    db.prepare('INSERT INTO members (pot_id, wallet, deposit_sig, status) VALUES (?,?,?,?)')
-      .run(pot.id, wallet, sig, 'active');
+    db.prepare('INSERT INTO members (pot_id, wallet, deposit_sig, status, tz_offset) VALUES (?,?,?,?,?)')
+      .run(pot.id, wallet, sig, 'active', (typeof req.body.tzOffset === 'number' ? req.body.tzOffset : 0));
     let autoStarted = false;
     if (pot.status === 'open') {
       const active = db.prepare("SELECT COUNT(*) c FROM members WHERE pot_id=? AND status='active'").get(pot.id).c;
@@ -107,9 +131,13 @@ app.post('/pot/:id/checkin', async (req, res) => {
     const day = dayFromBlockTime(pot, bt);
     if (day < 0) return res.status(400).json({ error: 'pot not started' });
     if (day >= pot.duration_days) return res.status(400).json({ error: 'pot ended' });
-    if (!inWindow(pot, bt)) return res.status(400).json({ error: 'outside check-in window' });
-    db.prepare('INSERT INTO checkins (pot_id, wallet, day, ts, sig) VALUES (?,?,?,?,?)').run(pot.id, wallet, day, Date.now(), sig);
-    res.json({ ok: true, day, verified: true });
+    const slot = matchSlot(pot, bt, m.tz_offset);
+    if (slot < 0) return res.status(400).json({ error: 'not within any check-in time slot (10 min grace)' });
+    db.prepare('INSERT INTO checkins (pot_id, wallet, day, ts, sig, slot) VALUES (?,?,?,?,?,?)').run(pot.id, wallet, day, Date.now(), sig, slot);
+    const slots = potSlots(pot);
+    const doneToday = db.prepare('SELECT COUNT(DISTINCT slot) c FROM checkins WHERE pot_id=? AND wallet=? AND day=?').get(pot.id, wallet, day).c;
+    const needed = slots ? slots.length : 1;
+    res.json({ ok: true, day, slot, slotsDone: doneToday, slotsNeeded: needed, verified: true });
   } catch (e) {
     if (String(e.message).includes('UNIQUE')) return res.status(400).json({ error: 'already checked in / sig used' });
     res.status(500).json({ error: e.message });
@@ -121,17 +149,21 @@ app.post('/pot/:id/sweep', (req, res) => {
   const pot = db.prepare("SELECT * FROM pots WHERE id=? AND status='running'").get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no running pot' });
   const day = potDay(pot);
+  const slots = potSlots(pot);
+  const needed = slots ? slots.length : 1;
   let eliminated = [];
+  // for each COMPLETED day, a member must have satisfied ALL required slots (distinct slot count >= needed)
   for (let d = 0; d < Math.min(day, pot.duration_days); d++) {
-    const missed = db.prepare(
-      "SELECT m.wallet FROM members m WHERE m.pot_id=? AND m.status='active' AND NOT EXISTS (SELECT 1 FROM checkins c WHERE c.pot_id=m.pot_id AND c.wallet=m.wallet AND c.day=?)"
-    ).all(pot.id, d);
-    for (const r of missed) {
-      db.prepare("UPDATE members SET status='eliminated' WHERE pot_id=? AND wallet=?").run(pot.id, r.wallet);
-      eliminated.push(r.wallet);
+    const actives = db.prepare("SELECT wallet FROM members WHERE pot_id=? AND status='active'").all(pot.id);
+    for (const a of actives) {
+      const done = db.prepare("SELECT COUNT(DISTINCT slot) c FROM checkins WHERE pot_id=? AND wallet=? AND day=?").get(pot.id, a.wallet, d).c;
+      if (done < needed) {
+        db.prepare("UPDATE members SET status='eliminated' WHERE pot_id=? AND wallet=?").run(pot.id, a.wallet);
+        eliminated.push(a.wallet);
+      }
     }
   }
-  res.json({ eliminated });
+  res.json({ eliminated, slotsRequired: needed });
 });
 
 // settle: rake ALREADY taken at lock. Split full pot among survivors.
@@ -174,7 +206,7 @@ app.get('/pot/:id', (req, res) => {
   const members = db.prepare('SELECT wallet, status FROM members WHERE pot_id=?').all(pot.id);
   const activeCount = members.filter(m => m.status === 'active').length;
   const fillEndsAt = pot.created_at ? pot.created_at + LATE_JOIN_MS : null;
-  res.json({ ...pot, day: pot.start_ts ? potDay(pot) : null, members, activeCount, fillEndsAt, depositTo: treasury.publicKey.toBase58(), checkinLamports: CHECKIN_LAMPORTS, rakeBps: RAKE_BPS });
+  res.json({ ...pot, day: pot.start_ts ? potDay(pot) : null, members, activeCount, fillEndsAt, slots: potSlots(pot), graceMin: SLOT_GRACE_MIN, depositTo: treasury.publicKey.toBase58(), checkinLamports: CHECKIN_LAMPORTS, rakeBps: RAKE_BPS });
 });
 
 
