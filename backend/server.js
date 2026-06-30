@@ -13,6 +13,7 @@ const conn = new Connection(RPC, 'confirmed');
 const secret = fs.readFileSync('treasury.txt','utf8').match(/SECRET: (.+)/)[1].trim();
 const treasury = Keypair.fromSecretKey(bs58.decode(secret));
 const RAKE_BPS = 300;
+const REVENUE_WALLET = '4a8o45skRPcyjAdyR8yES215Swvh8uTpZD6KLarhxCJ7'; // cj7 - rake destination
 const FREEZE_LAMPORTS = 15000000;
 const DAY_MS = 86400000;
 const CHECKIN_LAMPORTS = 5000;
@@ -21,7 +22,8 @@ function dayFromBlockTime(pot, blockTimeSec){ if(!pot.start_ts) return -1; const
 function inWindow(pot, blockTimeSec){ if(pot.checkin_start_min==null||pot.checkin_end_min==null) return true; const d=new Date(blockTimeSec*1000); const min=d.getUTCHours()*60+d.getUTCMinutes(); const a=pot.checkin_start_min,b=pot.checkin_end_min; return a<=b ? (min>=a&&min<=b) : (min>=a||min<=b); }
 
 function potDay(pot) {
-  return Math.floor((Date.now() - pot.start_ts) / DAY_MS);
+  const d = Math.floor((Date.now() - pot.start_ts) / DAY_MS);
+  return Math.min(d, pot.duration_days);
 }
 
 // create pot
@@ -38,8 +40,8 @@ app.post('/pot', (req, res) => {
   if (maxMembers != null && (maxMembers < 3 || maxMembers > 100)) return res.status(400).json({ error: 'maxMembers 3-100' });
   const rule = ruleText ? String(ruleText).slice(0,120) : null;
   const id = crypto.randomBytes(6).toString('hex');
-  db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days, rule_text, checkin_start_min, checkin_end_min, max_members) VALUES (?,?,?,?,?,?,?,?)')
-    .run(id, creator, Math.round(stakeSol * 1e9), durationDays, rule, win?checkinStartMin:null, win?checkinEndMin:null, maxMembers||null);
+  db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days, rule_text, checkin_start_min, checkin_end_min, max_members, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(id, creator, Math.round(stakeSol * 1e9), durationDays, rule, win?checkinStartMin:null, win?checkinEndMin:null, maxMembers||null, Date.now());
   res.json({ potId: id, depositTo: treasury.publicKey.toBase58() });
 });
 
@@ -132,31 +134,36 @@ app.post('/pot/:id/sweep', (req, res) => {
   res.json({ eliminated });
 });
 
-// settle: pay survivors, take rake
+// settle: rake ALREADY taken at lock. Split full pot among survivors.
+// No survivors -> sweep leftover pot to REVENUE (cj7) so nothing is stuck.
 app.post('/pot/:id/settle', async (req, res) => {
   const pot = db.prepare("SELECT * FROM pots WHERE id=? AND status='running'").get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no running pot' });
   if (potDay(pot) < pot.duration_days) return res.status(400).json({ error: 'not ended yet' });
   const all = db.prepare('SELECT * FROM members WHERE pot_id=? AND deposit_sig IS NOT NULL').all(pot.id);
   const survivors = all.filter(m => m.status === 'active');
-  if (!survivors.length) return res.status(400).json({ error: 'no survivors, rake takes all... kidding, manual review' });
   const totalPot = all.length * pot.stake_lamports;
-  const rake = Math.floor(totalPot * RAKE_BPS / 10000);
-  const share = Math.floor((totalPot - rake) / survivors.length);
+  const rakeAtLock = pot.rake_taken ? Math.floor(totalPot * RAKE_BPS / 10000) : 0;
+  const pool = totalPot - rakeAtLock; // rake already left treasury at lock
   const sigs = [];
   try {
+    if (!survivors.length) {
+      // edge case: everyone eliminated. Sweep remaining pool to revenue wallet.
+      const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: new PublicKey(REVENUE_WALLET), lamports: pool }));
+      const sig = await sendAndConfirmTransaction(conn, tx, [treasury]);
+      db.prepare('INSERT INTO payouts (pot_id, wallet, lamports, sig) VALUES (?,?,?,?)').run(pot.id, REVENUE_WALLET, pool, sig);
+      db.prepare("UPDATE pots SET status='settled' WHERE id=?").run(pot.id);
+      return res.json({ ok: true, survivors: 0, noSurvivorsSweptToRevenue: pool / 1e9, sigs: [sig] });
+    }
+    const share = Math.floor(pool / survivors.length);
     for (const s of survivors) {
-      const tx = new Transaction().add(SystemProgram.transfer({
-        fromPubkey: treasury.publicKey,
-        toPubkey: new PublicKey(s.wallet),
-        lamports: share
-      }));
+      const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: new PublicKey(s.wallet), lamports: share }));
       const sig = await sendAndConfirmTransaction(conn, tx, [treasury]);
       db.prepare('INSERT INTO payouts (pot_id, wallet, lamports, sig) VALUES (?,?,?,?)').run(pot.id, s.wallet, share, sig);
       sigs.push(sig);
     }
     db.prepare("UPDATE pots SET status='settled' WHERE id=?").run(pot.id);
-    res.json({ ok: true, survivors: survivors.length, sharePerSurvivor: share / 1e9, rakeSol: rake / 1e9, sigs });
+    res.json({ ok: true, survivors: survivors.length, sharePerSurvivor: share / 1e9, sigs });
   } catch (e) { res.status(500).json({ error: e.message, paidSoFar: sigs }); }
 });
 
@@ -165,7 +172,9 @@ app.get('/pot/:id', (req, res) => {
   const pot = db.prepare('SELECT * FROM pots WHERE id=?').get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no pot' });
   const members = db.prepare('SELECT wallet, status FROM members WHERE pot_id=?').all(pot.id);
-  res.json({ ...pot, day: pot.start_ts ? potDay(pot) : null, members, depositTo: treasury.publicKey.toBase58(), checkinLamports: CHECKIN_LAMPORTS });
+  const activeCount = members.filter(m => m.status === 'active').length;
+  const fillEndsAt = pot.created_at ? pot.created_at + LATE_JOIN_MS : null;
+  res.json({ ...pot, day: pot.start_ts ? potDay(pot) : null, members, activeCount, fillEndsAt, depositTo: treasury.publicKey.toBase58(), checkinLamports: CHECKIN_LAMPORTS, rakeBps: RAKE_BPS });
 });
 
 
@@ -233,4 +242,54 @@ app.post('/account/delete', (req, res) => {
   res.json({ ok: true, note: 'Off-chain records deleted. On-chain transactions are permanent by nature of the blockchain. Settlement records retained for accounting as permitted by law.' });
 });
 
-app.listen(3001, () => console.log('stakestreak on 3001, treasury:', treasury.publicKey.toBase58()));
+// LOCK pot + take 3% rake to revenue wallet (cron calls this at 24h-from-creation if >=3 members)
+app.post('/pot/:id/lock', async (req, res) => {
+  const pot = db.prepare("SELECT * FROM pots WHERE id=?").get(req.params.id);
+  if (!pot) return res.status(404).json({ error: 'no pot' });
+  if (pot.locked) return res.status(400).json({ error: 'already locked' });
+  if (pot.status === 'dead' || pot.status === 'settled') return res.status(400).json({ error: 'pot finished' });
+  const active = db.prepare("SELECT * FROM members WHERE pot_id=? AND status='active' AND deposit_sig IS NOT NULL").all(pot.id);
+  if (active.length < 3) return res.status(400).json({ error: 'under 3 members, should be refunded not locked' });
+  try {
+    // ensure running
+    if (pot.status === 'open' && !pot.start_ts) {
+      db.prepare("UPDATE pots SET status='running', start_ts=? WHERE id=?").run(Date.now(), pot.id);
+    }
+    let rakeSig = null;
+    if (!pot.rake_taken) {
+      const totalPot = active.length * pot.stake_lamports;
+      const rake = Math.floor(totalPot * RAKE_BPS / 10000);
+      if (rake > 0) {
+        const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: new PublicKey(REVENUE_WALLET), lamports: rake }));
+        rakeSig = await sendAndConfirmTransaction(conn, tx, [treasury]);
+        db.prepare('INSERT INTO payouts (pot_id, wallet, lamports, sig) VALUES (?,?,?,?)').run(pot.id, REVENUE_WALLET, rake, rakeSig);
+      }
+      db.prepare("UPDATE pots SET rake_taken=1, rake_sig=? WHERE id=?").run(rakeSig, pot.id);
+    }
+    db.prepare("UPDATE pots SET locked=1 WHERE id=?").run(pot.id);
+    res.json({ ok: true, locked: true, members: active.length, rakeSig });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// REFUND all members of an unfilled pot, mark dead (cron calls at 24h if <3 members)
+app.post('/pot/:id/killunfilled', async (req, res) => {
+  const pot = db.prepare("SELECT * FROM pots WHERE id=?").get(req.params.id);
+  if (!pot) return res.status(404).json({ error: 'no pot' });
+  if (pot.status === 'dead' || pot.status === 'settled') return res.status(400).json({ error: 'already finished' });
+  const active = db.prepare("SELECT * FROM members WHERE pot_id=? AND status='active' AND deposit_sig IS NOT NULL").all(pot.id);
+  if (active.length >= 3) return res.status(400).json({ error: 'has 3+ members, should lock not kill' });
+  const sigs = [];
+  try {
+    for (const m of active) {
+      const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: new PublicKey(m.wallet), lamports: pot.stake_lamports }));
+      const sig = await sendAndConfirmTransaction(conn, tx, [treasury]);
+      db.prepare('INSERT INTO payouts (pot_id, wallet, lamports, sig) VALUES (?,?,?,?)').run(pot.id, m.wallet, pot.stake_lamports, sig);
+      db.prepare("UPDATE members SET status='refunded' WHERE pot_id=? AND wallet=?").run(pot.id, m.wallet);
+      sigs.push(sig);
+    }
+    db.prepare("UPDATE pots SET status='dead' WHERE id=?").run(pot.id);
+    res.json({ ok: true, refunded: active.length, sigs });
+  } catch (e) { res.status(500).json({ error: e.message, paidSoFar: sigs }); }
+});
+
+app.listen(3002, () => console.log('stakestreak on 3002, treasury:', treasury.publicKey.toBase58()));
