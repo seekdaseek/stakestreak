@@ -46,11 +46,11 @@ export default function MoreAppsScreen() {
 }
 
 const st = StyleSheet.create({
-  wrap: {flex: 1, backgroundColor: '#FFF4EC'},
+  wrap: {flex: 1, backgroundColor: '#1A1310'},
   intro: {color: '#8A7E72', fontSize: 15, marginBottom: 16, textAlign: 'center'},
-  card: {backgroundColor: '#FFF', borderRadius: 20, borderWidth: 1, borderColor: '#FFE3D6', padding: 20, marginBottom: 16, alignItems: 'center'},
+  card: {backgroundColor: '#241A15', borderRadius: 20, borderWidth: 1, borderColor: '#3A2E24', padding: 20, marginBottom: 16, alignItems: 'center'},
   emoji: {fontSize: 40, marginBottom: 8},
-  name: {fontSize: 20, fontWeight: '900', color: '#2B2118', marginBottom: 6},
+  name: {fontSize: 20, fontWeight: '900', color: '#FFFFFF', marginBottom: 6},
   desc: {fontSize: 14, color: '#8A7E72', textAlign: 'center', lineHeight: 20, marginBottom: 14},
   btn: {backgroundColor: '#FF5A36', borderRadius: 16, paddingVertical: 12, paddingHorizontal: 24},
   btnText: {color: '#FFF', fontWeight: '800', fontSize: 15},

@@ -56,12 +56,12 @@ export default function HowItWorksScreen({navigation}) {
 }
 
 const st = StyleSheet.create({
-  wrap: {flex: 1, backgroundColor: '#FFF4EC', padding: 16},
-  card: {flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: '#FFE3D6', gap: 14},
+  wrap: {flex: 1, backgroundColor: '#1A1310', padding: 16},
+  card: {flexDirection: 'row', backgroundColor: '#241A15', borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: '#3A2E24', gap: 14},
   emoji: {fontSize: 30},
-  title: {fontSize: 16, fontWeight: '800', color: '#E8431F'},
-  body: {color: '#5C5247', marginTop: 4, lineHeight: 20},
-  more: {backgroundColor: '#FFF', borderRadius: 20, borderWidth: 1, borderColor: '#FFE3D6', padding: 16, alignItems: 'center', marginTop: 4},
+  title: {fontSize: 16, fontWeight: '800', color: '#FF7A54'},
+  body: {color: '#B8AB9E', marginTop: 4, lineHeight: 20},
+  more: {backgroundColor: '#241A15', borderRadius: 20, borderWidth: 1, borderColor: '#3A2E24', padding: 16, alignItems: 'center', marginTop: 4},
   moreText: {color: '#FF5A36', fontWeight: '800', fontSize: 15},
   legal: {color: '#8A7E72', fontSize: 12, lineHeight: 18, marginTop: 8, marginBottom: 20, textAlign: 'center'},
   del: {alignItems: 'center', padding: 12},

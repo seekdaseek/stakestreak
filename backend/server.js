@@ -97,9 +97,34 @@ app.post('/pot/:id/join', async (req, res) => {
       i.parsed.info.lamports >= pot.stake_lamports
     );
     if (!ix) {
-      const transfers = tx.transaction.message.instructions.filter(i=>i.parsed&&i.parsed.type==='transfer').map(i=>i.parsed.info);
-      console.log('JOIN DEPOSIT FAIL:', JSON.stringify({ body_wallet: wallet, want_dest: treasury.publicKey.toBase58(), want_min_lamports: pot.stake_lamports, actual_transfers: transfers }));
-      return res.status(400).json({ error: 'deposit not verified', debug: { body_wallet: wallet, want_dest: treasury.publicKey.toBase58(), want_min: pot.stake_lamports, actual: tx.transaction.message.instructions.filter(i=>i.parsed&&i.parsed.type==='transfer').map(i=>i.parsed.info) } });
+      // AUTO-REFUND SAFETY NET: if a real deposit landed in the treasury but the join
+      // could not be completed (e.g. wallet field mismatch), send it back to the actual payer.
+      const depositToTreasury = tx.transaction.message.instructions.find(i =>
+        i.parsed && i.parsed.type === 'transfer' &&
+        i.parsed.info.destination === treasury.publicKey.toBase58() &&
+        i.parsed.info.lamports > 0
+      );
+      if (depositToTreasury) {
+        const refundTo = depositToTreasury.parsed.info.source;
+        const refundLamports = depositToTreasury.parsed.info.lamports;
+        // guard: never refund the same sig twice
+        const already = db.prepare('SELECT 1 FROM members WHERE deposit_sig=?').get(sig) || db.prepare('SELECT 1 FROM payouts WHERE sig=?').get(sig);
+        if (already) return res.status(400).json({ error: 'deposit already processed' });
+        try {
+          const { blockhash } = await conn.getLatestBlockhash();
+          const rtx = new Transaction({ recentBlockhash: blockhash, feePayer: treasury.publicKey });
+          rtx.add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: new PublicKey(refundTo), lamports: refundLamports }));
+          const rsig = await conn.sendTransaction(rtx, [treasury]);
+          await conn.confirmTransaction(rsig, 'confirmed');
+          db.prepare('INSERT INTO payouts (pot_id, wallet, lamports, sig) VALUES (?,?,?,?)').run(pot.id, refundTo, refundLamports, rsig);
+          console.log('AUTO-REFUND:', refundLamports/1e9, 'SOL to', refundTo, 'sig', rsig);
+          return res.status(400).json({ error: 'deposit could not be credited (wallet mismatch) — auto-refunded to payer', refunded: refundLamports/1e9, refundSig: rsig });
+        } catch (re) {
+          console.log('AUTO-REFUND FAILED:', re.message);
+          return res.status(500).json({ error: 'deposit not credited and auto-refund failed — contact support', detail: re.message });
+        }
+      }
+      return res.status(400).json({ error: 'no deposit found in transaction' });
     }
     db.prepare('INSERT INTO members (pot_id, wallet, deposit_sig, status, tz_offset) VALUES (?,?,?,?,?)')
       .run(pot.id, wallet, sig, 'active', (typeof req.body.tzOffset === 'number' ? req.body.tzOffset : 0));

@@ -37,9 +37,9 @@ export default function ConnectScreen({navigation}) {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#FFF4EC', alignItems: 'center', justifyContent: 'center', padding: 32},
+  container: {flex: 1, backgroundColor: '#1A1310', alignItems: 'center', justifyContent: 'center', padding: 32},
   title: {color: '#FF5A36', fontSize: 36, fontWeight: 'bold', letterSpacing: 6, marginBottom: 8},
-  subtitle: {color: '#B08968', fontSize: 14, letterSpacing: 2, marginBottom: 40},
+  subtitle: {color: '#8A7E72', fontSize: 14, letterSpacing: 2, marginBottom: 40},
   badge: {width: 160, height: 160, marginBottom: 32},
   tagline: {color: '#FF5A36', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 48},
   error: {color: '#ff4444', marginBottom: 16, textAlign: 'center'},

@@ -38,6 +38,7 @@ export async function depositToTreasury(treasuryAddress, amountSol) {
     return await connection.sendRawTransaction(signed[0].serialize());
   });
   await connection.confirmTransaction(sig, 'confirmed');
+  if (payerAddr) await AsyncStorage.setItem('walletAddress', payerAddr);
   return { sig, payer: payerAddr };
 }
 
@@ -58,5 +59,6 @@ export async function checkinTx(treasuryAddress) {
     return await connection.sendRawTransaction(signed[0].serialize());
   });
   await connection.confirmTransaction(sig, 'confirmed');
+  if (payerAddr) await AsyncStorage.setItem('walletAddress', payerAddr);
   return { sig, payer: payerAddr };
 }

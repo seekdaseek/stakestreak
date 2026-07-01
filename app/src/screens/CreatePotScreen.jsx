@@ -66,7 +66,7 @@ export default function CreatePotScreen({navigation}) {
     <ScrollView style={st.scroll} contentContainerStyle={st.wrap} keyboardShouldPersistTaps="handled">
       <Text style={st.title}>New Pot</Text>
       <Text style={st.label}>The rule (what must players do daily?)</Text>
-      <TextInput style={st.input} value={rule} onChangeText={setRule} placeholder="e.g. Check in before 9am" placeholderTextColor="#B8AC9E" maxLength={120} />
+      <TextInput style={st.input} value={rule} onChangeText={setRule} placeholder="e.g. Check in before 9am" placeholderTextColor="#6B5D50" maxLength={120} />
       <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
         <Text style={st.label}>Check-in times (up to 4, local time)</Text>
         <TouchableOpacity onPress={() => setUse24h(!use24h)} style={st.toggle}>
@@ -123,21 +123,21 @@ export default function CreatePotScreen({navigation}) {
 }
 
 const st = StyleSheet.create({
-  scroll: {flex: 1, backgroundColor: '#FFF4EC'},
-  wrap: {padding: 16, paddingBottom: 60, backgroundColor: '#FFF4EC'},
-  title: {color: '#E8431F', fontSize: 28, fontWeight: '900', marginBottom: 16},
+  scroll: {flex: 1, backgroundColor: '#1A1310'},
+  wrap: {padding: 16, paddingBottom: 60, backgroundColor: '#1A1310'},
+  title: {color: '#FFFFFF', fontSize: 28, fontWeight: '900', marginBottom: 16},
   label: {color: '#8A7E72', marginBottom: 6, marginTop: 12},
-  input: {backgroundColor: '#FFFFFF', color: '#2B2118', borderRadius: 16, padding: 14, fontSize: 18},
+  input: {backgroundColor: '#241A15', color: '#FFFFFF', borderRadius: 16, padding: 14, fontSize: 18, borderWidth: 1, borderColor: '#3A2E24'},
   note: {color: '#8A7E72', marginTop: 16, lineHeight: 20},
-  addBtn: {backgroundColor: '#FFE3D6', borderRadius: 16, padding: 14, alignItems: 'center', marginTop: 10},
-  addBtnText: {color: '#E8431F', fontWeight: '800', fontSize: 15},
-  toggle: {backgroundColor: '#FFE3D6', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6},
-  toggleText: {color: '#E8431F', fontWeight: '800', fontSize: 12},
+  addBtn: {backgroundColor: '#2B1A15', borderWidth: 1, borderColor: '#FF5A36', borderRadius: 16, padding: 14, alignItems: 'center', marginTop: 10},
+  addBtnText: {color: '#FF7A54', fontWeight: '800', fontSize: 15},
+  toggle: {backgroundColor: '#2B1A15', borderWidth: 1, borderColor: '#FF5A36', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6},
+  toggleText: {color: '#FF7A54', fontWeight: '800', fontSize: 12},
   pickLabel: {color: '#8A7E72', fontSize: 12, marginTop: 10, marginBottom: 4},
   pickRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
-  pick: {backgroundColor: '#FFFFFF', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#FFE3D6', minWidth: 44, alignItems: 'center'},
+  pick: {backgroundColor: '#241A15', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#3A2E24', minWidth: 44, alignItems: 'center'},
   pickOn: {backgroundColor: '#FF5A36', borderColor: '#FF5A36'},
-  pickText: {color: '#2B2118', fontWeight: '700'},
+  pickText: {color: '#FFFFFF', fontWeight: '700'},
   pickTextOn: {color: '#FFFFFF', fontWeight: '800'},
   chip: {backgroundColor: '#FF5A36', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8},
   chipText: {color: '#FFF', fontWeight: '800'},

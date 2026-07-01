@@ -38,9 +38,10 @@ export default function App() {
       <Stack.Navigator
         initialRouteName={hasWallet ? 'PotList' : 'Connect'}
         screenOptions={{
-          headerStyle: {backgroundColor: '#FFF4EC'},
-          headerTintColor: '#2B2118',
-          contentStyle: {backgroundColor: '#FFF4EC'},
+          headerStyle: {backgroundColor: '#1A1310'},
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: {fontWeight: '900'},
+          contentStyle: {backgroundColor: '#1A1310'},
         }}>
         <Stack.Screen name="Connect" component={ConnectScreen} options={{headerShown: false}} />
         <Stack.Screen name="PotList" component={PotListScreen} options={({navigation}) => ({title: 'StakeStreak', headerRight: () => (

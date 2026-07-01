@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {getPot, joinPot} from '../services/api';
 import {getSavedWallet, depositToTreasury} from '../services/wallet';
 import {useToast} from '../components/Toast';
+import {C} from '../theme';
 
 export default function PotListScreen({navigation, route}) {
   const [pots, setPots] = useState([]);
@@ -63,13 +64,12 @@ export default function PotListScreen({navigation, route}) {
 
   return (
     <View style={st.wrap}>
-      <View style={st.blob} />
-      <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+      <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14}}>
         <Text style={st.title}>My Pots</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('HowItWorks')}><Text style={{fontSize: 22}}>{'\u2754'}</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('HowItWorks')}><Text style={{fontSize: 20, color: C.textDim}}>{'\u2754'}</Text></TouchableOpacity>
       </View>
       <View style={st.joinRow}>
-        <TextInput style={st.joinInput} value={code} onChangeText={setCode} placeholder="Have an invite code?" placeholderTextColor="#B8AB9E" autoCapitalize="none" />
+        <TextInput style={st.joinInput} value={code} onChangeText={setCode} placeholder="Have an invite code?" placeholderTextColor={C.textFaint} autoCapitalize="none" />
         <TouchableOpacity style={[st.joinBtn, (joining || !code.trim()) && st.dimmed]} disabled={joining || !code.trim()} onPress={join}>
           <Text style={st.joinBtnText}>{joining ? '...' : 'Join'}</Text>
         </TouchableOpacity>
@@ -77,53 +77,57 @@ export default function PotListScreen({navigation, route}) {
       <FlatList
         data={pots}
         keyExtractor={p => p.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor="#FF5A36" />}
-        ListEmptyComponent={<Text style={st.empty}>1. Create a pot  2. Friends join\n3. Check in daily  4. Survivors win \uD83D\uDD25</Text>}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={C.orange} />}
+        ListEmptyComponent={<Text style={st.empty}>No pots yet.{'\n'}Create one, invite friends,{'\n'}check in daily, survive to win {'\uD83D\uDD25'}</Text>}
         renderItem={({item}) => (
           <TouchableOpacity style={st.card} onPress={() => navigation.navigate('PotDetail', {potId: item.id})}>
-            {item.rule_text ? <Text style={st.cardRule}>“{item.rule_text}”</Text> : <Text style={st.potId}>#{item.id}</Text>}
-            <Text style={st.hero}>{item.stake_lamports * item.members.length / 1e9} SOL</Text>
-            {(() => {
-              const filling = item.status === 'open' || (item.status === 'running' && !item.locked);
-              if (item.status === 'settled') return <Text style={st.metaOver}>POT OVER</Text>;
-              if (item.status === 'dead') return <Text style={st.metaOver}>didn’t fill — refunded</Text>;
-              if (filling && item.fillEndsAt) {
-                const ms = item.fillEndsAt - now;
-                if (ms > 0) { const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000); return <Text style={st.metaUrgent}>{(item.activeCount||item.members.length)}/3 · {h}h {m}m left to join</Text>; }
-                return <Text style={st.meta}>locking...</Text>;
-              }
-              return <Text style={st.meta}>{item.duration_days} days · day {Math.min((item.day||0)+1, item.duration_days)} of {item.duration_days}</Text>;
-            })()}
-            <Text style={st.flames}>{item.day !== null ? '\uD83D\uDD25'.repeat(Math.min(item.day + 1, 14)) + '\u26AA'.repeat(Math.max(0, Math.min(item.duration_days, 14) - item.day - 1)) : ''}</Text>
-            <Text style={st.meta}>{item.members.filter(m => m.status === 'active').length} alive · {item.members.filter(m => m.status === 'eliminated').length} cooked 💀</Text>
+            {item.rule_text ? <Text style={st.cardRule}>{item.rule_text}</Text> : <Text style={st.potId}>#{item.id}</Text>}
+            <View style={st.potRow}>
+              <Text style={st.pot}>{(+((item.stake_lamports * item.members.length) / 1e9).toFixed(4))} <Text style={st.potUnit}>SOL</Text></Text>
+              {(() => {
+                const filling = item.status === 'open' || (item.status === 'running' && !item.locked);
+                if (item.status === 'settled') return <Text style={st.pillOver}>POT OVER</Text>;
+                if (item.status === 'dead') return <Text style={st.pillOver}>REFUNDED</Text>;
+                if (filling && item.fillEndsAt) {
+                  const ms = item.fillEndsAt - now;
+                  if (ms > 0) { const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000); return <Text style={st.pillUrgent}>{(item.activeCount||item.members.length)}/3 {'\u00b7'} {h}h {m}m</Text>; }
+                  return <Text style={st.pill}>locking...</Text>;
+                }
+                return <Text style={st.pill}>Day {Math.min((item.day||0)+1, item.duration_days)}/{item.duration_days}</Text>;
+              })()}
+            </View>
+            <Text style={st.flames}>{item.day !== null && item.status==='running' ? '\uD83D\uDD25'.repeat(Math.min(item.day + 1, 14)) + '\u26AA'.repeat(Math.max(0, Math.min(item.duration_days, 14) - item.day - 1)) : ''}</Text>
+            <Text style={st.meta}>{item.members.filter(m => m.status === 'active').length} alive {'\u00b7'} {item.members.filter(m => m.status === 'eliminated').length} cooked {'\uD83D\uDC80'}</Text>
           </TouchableOpacity>
         )}
       />
       <TouchableOpacity style={st.cta} onPress={() => navigation.navigate('CreatePot')}>
-        <Text style={st.ctaText}>+ New Pot</Text>
+        <Text style={st.ctaText}>+ NEW POT</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const st = StyleSheet.create({
-  joinRow: {flexDirection: 'row', marginBottom: 14, gap: 8},
-  joinInput: {flex: 1, backgroundColor: '#FFFFFF', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, color: '#2B2118', borderWidth: 1, borderColor: '#FFE3D6'},
-  joinBtn: {backgroundColor: '#FF5A36', borderRadius: 16, paddingHorizontal: 22, justifyContent: 'center'},
-  joinBtnText: {color: '#FFF', fontWeight: '800'},
+  wrap: {flex: 1, backgroundColor: C.bg, padding: 16, paddingTop: 20},
+  title: {color: C.text, fontSize: 28, fontWeight: '900'},
+  joinRow: {flexDirection: 'row', marginBottom: 16, gap: 8},
+  joinInput: {flex: 1, backgroundColor: C.card, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, color: C.text, borderWidth: 1, borderColor: C.cardEdge},
+  joinBtn: {backgroundColor: C.orange, borderRadius: 16, paddingHorizontal: 22, justifyContent: 'center'},
+  joinBtnText: {color: C.text, fontWeight: '900'},
   dimmed: {opacity: 0.4},
-  wrap: {flex: 1, backgroundColor: '#FFF4EC', padding: 16, overflow: 'hidden'},
-  blob: {position: 'absolute', top: -180, right: -120, width: 360, height: 360, borderRadius: 180, backgroundColor: '#FFE3D6', opacity: 0.6},
-  hero: {color: '#FF5A36', fontSize: 34, fontWeight: '900', marginTop: 2},
-  title: {color: '#E8431F', fontSize: 28, fontWeight: '900', marginBottom: 12},
-  empty: {color: '#8A7E72', marginTop: 40, textAlign: 'center'},
-  card: {backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 12, elevation: 3, borderWidth: 1, borderColor: '#FFE3D6'},
-  potId: {color: '#FF5A36', fontWeight: '800', fontSize: 16},
-  meta: {color: '#8A7E72', marginTop: 4, fontSize: 14, fontWeight: '600'},
-  flames: {fontSize: 13, marginTop: 6, letterSpacing: 1},
-  cardRule: {color: '#2B2118', fontWeight: '800', fontSize: 16, marginBottom: 2},
-  metaUrgent: {color: '#E8431F', marginTop: 4, fontSize: 14, fontWeight: '800'},
-  metaOver: {color: '#8A7E72', marginTop: 4, fontSize: 14, fontWeight: '800', letterSpacing: 0.5},
-  cta: {backgroundColor: '#FF5A36', borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 8},
-  ctaText: {color: '#FFFFFF', fontWeight: '800', fontSize: 16},
+  empty: {color: C.textDim, marginTop: 50, textAlign: 'center', fontSize: 15, lineHeight: 24},
+  card: {backgroundColor: C.card, borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: C.cardEdge},
+  cardRule: {color: C.text, fontWeight: '900', fontSize: 17, marginBottom: 6},
+  potId: {color: C.orange, fontWeight: '800', fontSize: 15, marginBottom: 6},
+  potRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+  pot: {color: C.gold, fontSize: 28, fontWeight: '900'},
+  potUnit: {fontSize: 14, color: C.gold},
+  pill: {color: C.textDim, fontSize: 13, fontWeight: '800'},
+  pillUrgent: {color: C.orangeLt, fontSize: 13, fontWeight: '900'},
+  pillOver: {color: C.textDim, fontSize: 13, fontWeight: '900', letterSpacing: 0.5},
+  flames: {fontSize: 14, marginTop: 8, letterSpacing: 1},
+  meta: {color: C.textDim, marginTop: 6, fontSize: 13, fontWeight: '700'},
+  cta: {backgroundColor: C.orange, borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 8},
+  ctaText: {color: C.text, fontWeight: '900', fontSize: 16},
 });
