@@ -35,10 +35,25 @@ export default function CreatePotScreen({navigation}) {
   const curAmPm = pickH < 12 ? 'am' : 'pm';
   const curH12 = (() => { let x = pickH % 12; return x === 0 ? 12 : x; })();
 
-  const create = async () => {
+  const create = () => {
+    if (!rule.trim()) { toast('Add a rule', 'What must players do each day?', 'error'); return; }
+    if (slots.length === 0) {
+      Alert.alert(
+        'No check-in times set',
+        'This will be an ANYTIME pot \u2014 players check in once per day, any time. If you meant to set specific times (like 6:00am), go back and tap "+ Add" after picking the time.',
+        [
+          {text: 'Add times', style: 'cancel'},
+          {text: 'Use anytime', onPress: () => doCreate()},
+        ]
+      );
+      return;
+    }
+    doCreate();
+  };
+
+  const doCreate = async () => {
     setBusy(true);
     try {
-      if (!rule.trim()) { toast('Add a rule', 'What must players do each day?', 'error'); setBusy(false); return; }
       const wallet = await getSavedWallet();
       const pot = await createPot(wallet, parseFloat(stake), parseInt(days), {ruleText: rule.trim(), checkinSlots: slots});
       // creator deposits + joins immediately
