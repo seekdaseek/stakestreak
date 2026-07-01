@@ -13,6 +13,12 @@ const STEPS = [
   ['\u21A9\uFE0F', 'Changed your mind?', 'Before a pot starts you can leave and get a full refund of your stake anytime.'],
 ];
 
+const SAMPLES = [
+  {rule: "Wake up by 6:00am", pot: 2.4, players: 8, alive: 3, slots: "06:00", days: 7, status: "running"},
+  {rule: "Gym check-in, twice daily", pot: 1.5, players: 6, alive: 2, slots: "12:00  18:00", days: 14, status: "running"},
+  {rule: "No doomscrolling before noon", pot: 0.9, players: 5, alive: 2, slots: "12:00", days: 5, status: "ended"},
+];
+
 export default function HowItWorksScreen({navigation}) {
   const toast = useToast();
 
@@ -44,6 +50,20 @@ export default function HowItWorksScreen({navigation}) {
           </View>
         </View>
       ))}
+      <Text style={st.sampleHdr}>WHAT A POT LOOKS LIKE</Text>
+      <Text style={st.sampleSub}>Illustrations only — not real pots you can join.</Text>
+      {SAMPLES.map((s2, i) => (
+        <View key={i} style={st.sampleCard}>
+          <View style={st.watermark} pointerEvents="none"><Text style={st.watermarkText}>SAMPLE</Text></View>
+          <Text style={st.sampleRule}>{s2.rule}</Text>
+          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4}}>
+            <Text style={st.samplePot}>{s2.pot} <Text style={st.samplePotUnit}>SOL pot</Text></Text>
+            <Text style={s2.status === 'ended' ? st.samplePillOver : st.samplePill}>{s2.status === 'ended' ? s2.alive + ' split it 🏆' : s2.alive + '/' + s2.players + ' alive'}</Text>
+          </View>
+          <Text style={st.sampleMeta}>{s2.slots} {'\u00b7'} {s2.days} days {'\u00b7'} {s2.players} joined</Text>
+        </View>
+      ))}
+
       <TouchableOpacity style={st.more} onPress={() => navigation.navigate('MoreApps')}>
         <Text style={st.moreText}>More apps by seekdaseek \u2192</Text>
       </TouchableOpacity>
@@ -63,6 +83,17 @@ const st = StyleSheet.create({
   body: {color: '#B8AB9E', marginTop: 4, lineHeight: 20},
   more: {backgroundColor: '#241A15', borderRadius: 20, borderWidth: 1, borderColor: '#3A2E24', padding: 16, alignItems: 'center', marginTop: 4},
   moreText: {color: '#FF5A36', fontWeight: '800', fontSize: 15},
+  sampleHdr: {color: '#8A7E72', fontSize: 12, fontWeight: '900', letterSpacing: 1.5, marginTop: 20, marginBottom: 2},
+  sampleSub: {color: '#6B5D50', fontSize: 12, marginBottom: 10, fontStyle: 'italic'},
+  sampleCard: {backgroundColor: '#241A15', borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: '#3A2E24', overflow: 'hidden'},
+  watermark: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center'},
+  watermarkText: {color: 'rgba(255,255,255,0.06)', fontSize: 44, fontWeight: '900', letterSpacing: 4, transform: [{rotate: '-18deg'}]},
+  sampleRule: {color: '#FFFFFF', fontWeight: '900', fontSize: 16},
+  samplePot: {color: '#FFD84D', fontSize: 22, fontWeight: '900'},
+  samplePotUnit: {color: '#FFD84D', fontSize: 13},
+  samplePill: {color: '#FF7A54', fontSize: 13, fontWeight: '900'},
+  samplePillOver: {color: '#7BC950', fontSize: 13, fontWeight: '900'},
+  sampleMeta: {color: '#8A7E72', fontSize: 12, fontWeight: '700', marginTop: 8},
   legal: {color: '#8A7E72', fontSize: 12, lineHeight: 18, marginTop: 8, marginBottom: 20, textAlign: 'center'},
   del: {alignItems: 'center', padding: 12},
   delText: {color: '#FF3B6B', fontWeight: '600', textDecorationLine: 'underline'},
