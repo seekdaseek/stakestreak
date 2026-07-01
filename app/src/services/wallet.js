@@ -8,7 +8,7 @@ export const connection = new Connection('https://mainnet.helius-rpc.com/?api-ke
 
 export async function connectWallet() {
   const result = await transact(async (wallet) => {
-    const auth = await wallet.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://seekdaseek.github.io', icon: 'favicon.ico' } });
+    const auth = await wallet.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://stakestreak.ochinimus.app', icon: 'favicon.ico' } });
     return auth.accounts[0].address;
   });
   const pubkey = new PublicKey(Buffer.from(result, 'base64')).toBase58();
@@ -28,7 +28,7 @@ export async function depositToTreasury(treasuryAddress, amountSol) {
   const {SystemProgram, Transaction, PublicKey: PK} = require('@solana/web3.js');
   let payerAddr = null;
   const sig = await transact(async (mwa) => {
-    const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://seekdaseek.github.io', icon: 'favicon.ico' } });
+    const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://stakestreak.ochinimus.app', icon: 'favicon.ico' } });
     const payer = new PK(Buffer.from(auth.accounts[0].address, 'base64'));
     payerAddr = payer.toBase58();
     const { blockhash } = await connection.getLatestBlockhash();
@@ -49,7 +49,7 @@ export async function checkinTx(treasuryAddress) {
   const {SystemProgram, Transaction, PublicKey: PK} = require('@solana/web3.js');
   let payerAddr = null;
   const sig = await transact(async (mwa) => {
-    const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://seekdaseek.github.io', icon: 'favicon.ico' } });
+    const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://stakestreak.ochinimus.app', icon: 'favicon.ico' } });
     const payer = new PK(Buffer.from(auth.accounts[0].address, 'base64'));
     payerAddr = payer.toBase58();
     const { blockhash } = await connection.getLatestBlockhash();
