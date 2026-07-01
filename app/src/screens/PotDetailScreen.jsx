@@ -28,8 +28,8 @@ export default function PotDetailScreen({route}) {
   const doCheckin = async () => {
     setBusy(true);
     try {
-      const sig = await checkinTx(pot.depositTo);
-      const r = await checkinPot(potId, wallet, sig);
+      const ci = await checkinTx(pot.depositTo);
+      const r = await checkinPot(potId, ci.payer, ci.sig);
       const msg = r.slotsNeeded > 1 ? ('Check-in ' + r.slotsDone + ' of ' + r.slotsNeeded + ' done today.') : 'Streak alive. See you tomorrow.';
       toast(r.slotsDone >= r.slotsNeeded ? 'Day ' + (r.day + 1) + ' secured' : 'Checked in', msg, 'win');
       load();
@@ -47,8 +47,8 @@ export default function PotDetailScreen({route}) {
   const doFreeze = async () => {
     setBusy(true);
     try {
-      const sig = await depositToTreasury(pot.depositTo, 0.015);
-      const r = await buyFreeze(potId, wallet, sig);
+      const dep = await depositToTreasury(pot.depositTo, 0.015);
+      const r = await buyFreeze(potId, dep.payer, dep.sig);
       toast('Back from the dead', 'Day ' + r.coveredDay + ' covered. Don\'t waste it.', 'win');
       load();
     } catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }

@@ -10,6 +10,14 @@ app.use(express.json());
 
 const RPC = process.env.RPC || 'https://api.devnet.solana.com';
 const conn = new Connection(RPC, 'confirmed');
+async function getTxWithRetry(sig, tries = 5, delayMs = 2000) {
+  for (let i = 0; i < tries; i++) {
+    const tx = await conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 });
+    if (tx) return tx;
+    if (i < tries - 1) await new Promise(r => setTimeout(r, delayMs));
+  }
+  return null;
+}
 const secret = fs.readFileSync('treasury.txt','utf8').match(/SECRET: (.+)/)[1].trim();
 const treasury = Keypair.fromSecretKey(bs58.decode(secret));
 const RAKE_BPS = 300;
@@ -49,7 +57,7 @@ function potDay(pot) {
 app.post('/pot', (req, res) => {
   const { creator, stakeSol, durationDays, ruleText, checkinStartMin, checkinEndMin, maxMembers } = req.body;
   if (!creator || !stakeSol || !durationDays) return res.status(400).json({ error: 'missing fields' });
-  if (durationDays < 3 || durationDays > 90) return res.status(400).json({ error: 'duration 3-90 days' });
+  if (durationDays < 2 || durationDays > 90) return res.status(400).json({ error: 'duration 2-90 days' });
   if (stakeSol < 0.01) return res.status(400).json({ error: 'min stake 0.01 SOL' });
   const win = (checkinStartMin != null || checkinEndMin != null);
   if (win) {
@@ -80,7 +88,7 @@ app.post('/pot/:id/join', async (req, res) => {
   const dup = db.prepare('SELECT 1 FROM members WHERE deposit_sig=?').get(sig);
   if (dup) return res.status(400).json({ error: 'sig reused' });
   try {
-    const tx = await conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 });
+    const tx = await getTxWithRetry(sig);
     if (!tx || tx.meta.err) return res.status(400).json({ error: 'tx not found/failed' });
     const ix = tx.transaction.message.instructions.find(i =>
       i.parsed && i.parsed.type === 'transfer' &&
@@ -88,7 +96,11 @@ app.post('/pot/:id/join', async (req, res) => {
       i.parsed.info.source === wallet &&
       i.parsed.info.lamports >= pot.stake_lamports
     );
-    if (!ix) return res.status(400).json({ error: 'deposit not verified' });
+    if (!ix) {
+      const transfers = tx.transaction.message.instructions.filter(i=>i.parsed&&i.parsed.type==='transfer').map(i=>i.parsed.info);
+      console.log('JOIN DEPOSIT FAIL:', JSON.stringify({ body_wallet: wallet, want_dest: treasury.publicKey.toBase58(), want_min_lamports: pot.stake_lamports, actual_transfers: transfers }));
+      return res.status(400).json({ error: 'deposit not verified', debug: { body_wallet: wallet, want_dest: treasury.publicKey.toBase58(), want_min: pot.stake_lamports, actual: tx.transaction.message.instructions.filter(i=>i.parsed&&i.parsed.type==='transfer').map(i=>i.parsed.info) } });
+    }
     db.prepare('INSERT INTO members (pot_id, wallet, deposit_sig, status, tz_offset) VALUES (?,?,?,?,?)')
       .run(pot.id, wallet, sig, 'active', (typeof req.body.tzOffset === 'number' ? req.body.tzOffset : 0));
     let autoStarted = false;
@@ -122,7 +134,7 @@ app.post('/pot/:id/checkin', async (req, res) => {
   const reused = db.prepare('SELECT 1 FROM checkins WHERE sig=?').get(sig) || db.prepare('SELECT 1 FROM members WHERE deposit_sig=?').get(sig) || db.prepare('SELECT 1 FROM payouts WHERE sig=?').get(sig);
   if (reused) return res.status(400).json({ error: 'sig reused' });
   try {
-    const tx = await conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 });
+    const tx = await getTxWithRetry(sig);
     if (!tx || tx.meta.err) return res.status(400).json({ error: 'tx not found/failed' });
     const ix = tx.transaction.message.instructions.find(i => i.parsed && i.parsed.type === 'transfer' && i.parsed.info.destination === treasury.publicKey.toBase58() && i.parsed.info.source === wallet && i.parsed.info.lamports >= CHECKIN_LAMPORTS);
     if (!ix) return res.status(400).json({ error: 'checkin payment not verified' });
@@ -222,7 +234,7 @@ app.post('/pot/:id/freeze', async (req, res) => {
   const dupF = db.prepare("SELECT 1 FROM payouts WHERE sig=?").get(sig);
   if (dup || dupF) return res.status(400).json({ error: 'sig reused' });
   try {
-    const tx = await conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 });
+    const tx = await getTxWithRetry(sig);
     if (!tx || tx.meta.err) return res.status(400).json({ error: 'tx not found' });
     const ix = tx.transaction.message.instructions.find(i =>
       i.parsed && i.parsed.type === 'transfer' &&

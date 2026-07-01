@@ -35,8 +35,8 @@ export default function PotListScreen({navigation, route}) {
       const wallet = await getSavedWallet();
       if (pot.members.some(m => m.wallet === wallet)) throw new Error('You are already in this pot');
       const stake = pot.stake_lamports / 1e9;
-      const sig = await depositToTreasury(pot.depositTo, stake);
-      await joinPot(id, wallet, sig, -new Date().getTimezoneOffset());
+      const dep = await depositToTreasury(pot.depositTo, stake);
+      await joinPot(id, dep.payer, dep.sig, -new Date().getTimezoneOffset());
       const ids = JSON.parse((await AsyncStorage.getItem('myPots')) || '[]');
       if (!ids.includes(id)) { ids.unshift(id); await AsyncStorage.setItem('myPots', JSON.stringify(ids)); }
       setCode('');

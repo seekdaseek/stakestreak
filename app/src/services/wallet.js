@@ -26,9 +26,11 @@ export async function disconnectWallet() {
 
 export async function depositToTreasury(treasuryAddress, amountSol) {
   const {SystemProgram, Transaction, PublicKey: PK} = require('@solana/web3.js');
+  let payerAddr = null;
   const sig = await transact(async (mwa) => {
     const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://seekdaseek.github.io', icon: 'favicon.ico' } });
     const payer = new PK(Buffer.from(auth.accounts[0].address, 'base64'));
+    payerAddr = payer.toBase58();
     const { blockhash } = await connection.getLatestBlockhash();
     const tx = new Transaction({ recentBlockhash: blockhash, feePayer: payer });
     tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: new PK(treasuryAddress), lamports: Math.round(amountSol * 1e9) }));
@@ -36,7 +38,7 @@ export async function depositToTreasury(treasuryAddress, amountSol) {
     return await connection.sendRawTransaction(signed[0].serialize());
   });
   await connection.confirmTransaction(sig, 'confirmed');
-  return sig;
+  return { sig, payer: payerAddr };
 }
 
 
@@ -44,9 +46,11 @@ export async function depositToTreasury(treasuryAddress, amountSol) {
 export const CHECKIN_LAMPORTS = 5000;
 export async function checkinTx(treasuryAddress) {
   const {SystemProgram, Transaction, PublicKey: PK} = require('@solana/web3.js');
+  let payerAddr = null;
   const sig = await transact(async (mwa) => {
     const auth = await mwa.authorize({ cluster: 'mainnet-beta', identity: { name: 'StakeStreak', uri: 'https://seekdaseek.github.io', icon: 'favicon.ico' } });
     const payer = new PK(Buffer.from(auth.accounts[0].address, 'base64'));
+    payerAddr = payer.toBase58();
     const { blockhash } = await connection.getLatestBlockhash();
     const tx = new Transaction({ recentBlockhash: blockhash, feePayer: payer });
     tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: new PK(treasuryAddress), lamports: CHECKIN_LAMPORTS }));
@@ -54,5 +58,5 @@ export async function checkinTx(treasuryAddress) {
     return await connection.sendRawTransaction(signed[0].serialize());
   });
   await connection.confirmTransaction(sig, 'confirmed');
-  return sig;
+  return { sig, payer: payerAddr };
 }

@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Share} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Share, ScrollView} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {createPot, joinPot, startPot} from '../services/api';
 import {getSavedWallet, depositToTreasury} from '../services/wallet';
@@ -10,23 +10,30 @@ export default function CreatePotScreen({navigation}) {
   const [stake, setStake] = useState('0.1');
   const [days, setDays] = useState('7');
   const [slots, setSlots] = useState([]); // minutes-into-day, up to 4
-  const [timeInput, setTimeInput] = useState('');
+  const [use24h, setUse24h] = useState(false);
+  const [pickH, setPickH] = useState(6);   // 0-23 internal
+  const [pickM, setPickM] = useState(0);    // 0,15,30,45
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
   const addSlot = () => {
-    const m = timeInput.trim().match(/^([0-2]?\d):([0-5]\d)$/);
-    if (!m) { toast('Bad time', 'Use 24h format like 06:30 or 15:00', 'error'); return; }
-    const h = parseInt(m[1]), min = parseInt(m[2]);
-    if (h > 23) { toast('Bad time', 'Hour must be 0-23', 'error'); return; }
     if (slots.length >= 4) { toast('Max 4', 'Up to 4 check-in times per pot.', 'error'); return; }
-    const mins = h * 60 + min;
+    const mins = pickH * 60 + pickM;
     if (slots.includes(mins)) { toast('Already added', 'That time is already a slot.', 'error'); return; }
     setSlots([...slots, mins].sort((a,b)=>a-b));
-    setTimeInput('');
   };
   const removeSlot = (mins) => setSlots(slots.filter(x => x !== mins));
-  const fmtSlot = (mins) => String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0');
+  const fmtSlot = (mins) => {
+    const h = Math.floor(mins/60), m = mins%60;
+    if (use24h) return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+    const ap = h < 12 ? 'am' : 'pm'; let h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + String(m).padStart(2,'0') + ap;
+  };
+  // hour options depend on mode
+  const hourOptions = use24h ? Array.from({length:24},(_,i)=>i) : [12,1,2,3,4,5,6,7,8,9,10,11];
+  const setHourFrom12 = (h12, ap) => { let h = h12 % 12; if (ap === 'pm') h += 12; setPickH(h); };
+  const curAmPm = pickH < 12 ? 'am' : 'pm';
+  const curH12 = (() => { let x = pickH % 12; return x === 0 ? 12 : x; })();
 
   const create = async () => {
     setBusy(true);
@@ -35,8 +42,15 @@ export default function CreatePotScreen({navigation}) {
       const wallet = await getSavedWallet();
       const pot = await createPot(wallet, parseFloat(stake), parseInt(days), {ruleText: rule.trim(), checkinSlots: slots});
       // creator deposits + joins immediately
-      const sig = await depositToTreasury(pot.depositTo, parseFloat(stake));
-      await joinPot(pot.potId, wallet, sig, -new Date().getTimezoneOffset());
+      const dep = await depositToTreasury(pot.depositTo, parseFloat(stake));
+      try {
+        await joinPot(pot.potId, dep.payer, dep.sig, -new Date().getTimezoneOffset());
+      } catch (je) {
+        const dbg = je.response?.data?.debug;
+        toast('JOIN FAILED', 'sig sent: ' + String(sig).slice(0,12) + '... | ' + (dbg ? ('want ' + (dbg.want_min/1e9) + ' to ' + String(dbg.want_dest).slice(0,6) + ' | got: ' + JSON.stringify(dbg.actual)) : (je.response?.data?.error || je.message)), 'error');
+        setBusy(false);
+        return;
+      }
       const ids = JSON.parse((await AsyncStorage.getItem('myPots')) || '[]');
       ids.unshift(pot.potId);
       await AsyncStorage.setItem('myPots', JSON.stringify(ids));
@@ -49,15 +63,45 @@ export default function CreatePotScreen({navigation}) {
   };
 
   return (
-    <View style={st.wrap}>
+    <ScrollView style={st.scroll} contentContainerStyle={st.wrap} keyboardShouldPersistTaps="handled">
       <Text style={st.title}>New Pot</Text>
       <Text style={st.label}>The rule (what must players do daily?)</Text>
       <TextInput style={st.input} value={rule} onChangeText={setRule} placeholder="e.g. Check in before 9am" placeholderTextColor="#B8AC9E" maxLength={120} />
-      <Text style={st.label}>Check-in times (up to 4, local to each player)</Text>
-      <View style={{flexDirection: 'row', gap: 8}}>
-        <TextInput style={[st.input, {flex: 1}]} value={timeInput} onChangeText={setTimeInput} placeholder="e.g. 06:30" placeholderTextColor="#B8AC9E" keyboardType="numbers-and-punctuation" />
-        <TouchableOpacity style={st.addBtn} onPress={addSlot}><Text style={st.addBtnText}>+ Add</Text></TouchableOpacity>
+      <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+        <Text style={st.label}>Check-in times (up to 4, local time)</Text>
+        <TouchableOpacity onPress={() => setUse24h(!use24h)} style={st.toggle}>
+          <Text style={st.toggleText}>{use24h ? '24h' : 'AM/PM'}</Text>
+        </TouchableOpacity>
       </View>
+      <Text style={st.pickLabel}>Hour</Text>
+      <View style={st.pickRow}>
+        {hourOptions.map(h => {
+          const active = use24h ? pickH === h : curH12 === h;
+          return <TouchableOpacity key={h} style={[st.pick, active && st.pickOn]} onPress={() => use24h ? setPickH(h) : setHourFrom12(h, curAmPm)}>
+            <Text style={[st.pickText, active && st.pickTextOn]}>{use24h ? String(h).padStart(2,'0') : h}</Text>
+          </TouchableOpacity>;
+        })}
+      </View>
+      <Text style={st.pickLabel}>Minute</Text>
+      <View style={st.pickRow}>
+        {[0,15,30,45].map(mm => (
+          <TouchableOpacity key={mm} style={[st.pick, pickM === mm && st.pickOn]} onPress={() => setPickM(mm)}>
+            <Text style={[st.pickText, pickM === mm && st.pickTextOn]}>{String(mm).padStart(2,'0')}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {!use24h && (
+        <View style={st.pickRow}>
+          {['am','pm'].map(ap => (
+            <TouchableOpacity key={ap} style={[st.pick, curAmPm === ap && st.pickOn]} onPress={() => setHourFrom12(curH12, ap)}>
+              <Text style={[st.pickText, curAmPm === ap && st.pickTextOn]}>{ap.toUpperCase()}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+      <TouchableOpacity style={st.addBtn} onPress={addSlot}>
+        <Text style={st.addBtnText}>+ Add {fmtSlot(pickH*60+pickM)}</Text>
+      </TouchableOpacity>
       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10}}>
         {slots.map(mins => (
           <TouchableOpacity key={mins} style={st.chip} onPress={() => removeSlot(mins)}>
@@ -74,18 +118,27 @@ export default function CreatePotScreen({navigation}) {
       <TouchableOpacity style={[st.cta, busy && {opacity: 0.5}]} disabled={busy} onPress={create}>
         <Text style={st.ctaText}>{busy ? 'Creating...' : 'Stake & Create'}</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const st = StyleSheet.create({
-  wrap: {flex: 1, backgroundColor: '#FFF4EC', padding: 16},
+  scroll: {flex: 1, backgroundColor: '#FFF4EC'},
+  wrap: {padding: 16, paddingBottom: 60, backgroundColor: '#FFF4EC'},
   title: {color: '#E8431F', fontSize: 28, fontWeight: '900', marginBottom: 16},
   label: {color: '#8A7E72', marginBottom: 6, marginTop: 12},
   input: {backgroundColor: '#FFFFFF', color: '#2B2118', borderRadius: 16, padding: 14, fontSize: 18},
   note: {color: '#8A7E72', marginTop: 16, lineHeight: 20},
-  addBtn: {backgroundColor: '#FFE3D6', borderRadius: 16, paddingHorizontal: 18, justifyContent: 'center'},
-  addBtnText: {color: '#E8431F', fontWeight: '800'},
+  addBtn: {backgroundColor: '#FFE3D6', borderRadius: 16, padding: 14, alignItems: 'center', marginTop: 10},
+  addBtnText: {color: '#E8431F', fontWeight: '800', fontSize: 15},
+  toggle: {backgroundColor: '#FFE3D6', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6},
+  toggleText: {color: '#E8431F', fontWeight: '800', fontSize: 12},
+  pickLabel: {color: '#8A7E72', fontSize: 12, marginTop: 10, marginBottom: 4},
+  pickRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
+  pick: {backgroundColor: '#FFFFFF', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#FFE3D6', minWidth: 44, alignItems: 'center'},
+  pickOn: {backgroundColor: '#FF5A36', borderColor: '#FF5A36'},
+  pickText: {color: '#2B2118', fontWeight: '700'},
+  pickTextOn: {color: '#FFFFFF', fontWeight: '800'},
   chip: {backgroundColor: '#FF5A36', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8},
   chipText: {color: '#FFF', fontWeight: '800'},
   hint: {color: '#8A7E72', fontSize: 13, marginTop: 8, lineHeight: 18},
