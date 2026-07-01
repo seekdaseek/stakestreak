@@ -59,13 +59,14 @@ app.post('/pot', (req, res) => {
   if (!creator || !stakeSol || !durationDays) return res.status(400).json({ error: 'missing fields' });
   if (durationDays < 2 || durationDays > 90) return res.status(400).json({ error: 'duration 2-90 days' });
   if (stakeSol < 0.01) return res.status(400).json({ error: 'min stake 0.01 SOL' });
+  if (!ruleText || !String(ruleText).trim()) return res.status(400).json({ error: 'rule required' });
   const win = (checkinStartMin != null || checkinEndMin != null);
   if (win) {
     if (checkinStartMin == null || checkinEndMin == null) return res.status(400).json({ error: 'both window bounds required' });
     if (checkinStartMin < 0 || checkinStartMin > 1439 || checkinEndMin < 0 || checkinEndMin > 1439) return res.status(400).json({ error: 'window minutes 0-1439' });
   }
   if (maxMembers != null && (maxMembers < 3 || maxMembers > 100)) return res.status(400).json({ error: 'maxMembers 3-100' });
-  const rule = ruleText ? String(ruleText).slice(0,120) : null;
+  const rule = String(ruleText).trim().slice(0,120);
   const id = crypto.randomBytes(6).toString('hex');
   let slotsJson = null;
   if (Array.isArray(req.body.checkinSlots) && req.body.checkinSlots.length) {
@@ -306,7 +307,6 @@ app.post('/pot/:id/freeze', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/dbg',(req,res)=>{console.log('PHONE:',req.query.m);res.json({ok:1})});
 
 // refund deposit if pot never started
 app.post('/pot/:id/refund', async (req, res) => {
