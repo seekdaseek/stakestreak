@@ -10,7 +10,6 @@ const STEPS = [
   ['\u2600\uFE0F', 'Check in daily', 'Once started, every member must open the app and check in every single day. Miss a day and you are eliminated.'],
   ['\uD83E\uDDCA', 'Streak freeze', 'Slipped once? Buy a freeze (0.015 SOL) to cover one missed day and get back in. Max 2 per pot.'],
   ['\uD83D\uDCB0', 'Survivors split the pot', 'When time runs out, everyone still standing splits the whole pot equally - including the stakes of those who quit. A 3% service fee applies.'],
-  ['\u21A9\uFE0F', 'Changed your mind?', 'Before a pot starts you can leave and get a full refund of your stake anytime.'],
 ];
 
 const SAMPLES = [
@@ -65,7 +64,7 @@ export default function HowItWorksScreen({navigation}) {
       ))}
 
       <TouchableOpacity style={st.more} onPress={() => navigation.navigate('MoreApps')}>
-        <Text style={st.moreText}>More apps by seekdaseek \u2192</Text>
+        <Text style={st.moreText}>More from ochinimus →</Text>
       </TouchableOpacity>
       <Text style={st.legal}>StakeStreak is a skill-based accountability challenge. Outcomes depend entirely on your own daily actions. Only stake what you can afford to lose, and make sure participation is lawful where you live.</Text>
       <TouchableOpacity style={st.del} onPress={deleteAccount}>
