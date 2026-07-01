@@ -24,5 +24,8 @@ export const buyFreeze = (potId, wallet, sig) =>
 export const getPot = (potId) =>
   api.get('/pot/' + potId).then(r => r.data);
 
+export const getFeed = () =>
+  api.get('/pots/feed').then(r => r.data);
+
 export const refundPot = (potId, wallet) =>
   api.post('/pot/' + potId + '/refund', { wallet }).then(r => r.data);

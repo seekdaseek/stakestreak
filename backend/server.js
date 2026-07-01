@@ -237,6 +237,35 @@ app.post('/pot/:id/settle', async (req, res) => {
 });
 
 // pot status
+
+app.get('/pots/feed', (req, res) => {
+  const now = Date.now();
+  const FILL_MS = 24 * 3600 * 1000;
+  const rows = db.prepare("SELECT * FROM pots WHERE status IN ('open','running','settled','dead') ORDER BY created_at DESC").all();
+  const shape = (p) => {
+    const members = db.prepare("SELECT wallet, status FROM members WHERE pot_id=?").all(p.id);
+    const activeCount = members.filter(m => m.status === 'active').length;
+    const fillEndsAt = p.created_at ? p.created_at + FILL_MS : null;
+    let slots = null; try { const a = p.checkin_slots ? JSON.parse(p.checkin_slots) : null; slots = Array.isArray(a) && a.length ? a : null; } catch {}
+    return {
+      id: p.id, rule_text: p.rule_text, stake_lamports: p.stake_lamports,
+      duration_days: p.duration_days, status: p.status, locked: p.locked,
+      day: p.start_ts ? Math.max(0, Math.floor((now - p.start_ts) / 86400000)) : null,
+      memberCount: members.length, activeCount, fillEndsAt, slots,
+      rakeBps: RAKE_BPS,
+    };
+  };
+  const joinable = [], active = [], finished = [];
+  for (const p of rows) {
+    const o = shape(p);
+    const canJoin = p.status === 'open' && !p.locked && o.fillEndsAt && o.fillEndsAt > now;
+    if (canJoin) joinable.push(o);
+    else if (p.status === 'running') active.push(o);
+    else finished.push(o);
+  }
+  res.json({ joinable, active, finished: finished.slice(0, 20) });
+});
+
 app.get('/pot/:id', (req, res) => {
   const pot = db.prepare('SELECT * FROM pots WHERE id=?').get(req.params.id);
   if (!pot) return res.status(404).json({ error: 'no pot' });

@@ -1,14 +1,16 @@
 import React, {useState, useCallback, useEffect} from 'react';
-import {View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, TextInput} from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, TextInput} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {getPot, joinPot} from '../services/api';
+import {getPot, joinPot, getFeed} from '../services/api';
 import {getSavedWallet, depositToTreasury} from '../services/wallet';
 import {useToast} from '../components/Toast';
 import {C} from '../theme';
 
 export default function PotListScreen({navigation, route}) {
-  const [pots, setPots] = useState([]);
+  const [feed, setFeed] = useState({joinable: [], active: [], finished: []});
+  const [myIds, setMyIds] = useState([]);
+  const [tab, setTab] = useState('discover'); // 'discover' | 'mine'
   const [refreshing, setRefreshing] = useState(false);
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
@@ -51,56 +53,103 @@ export default function PotListScreen({navigation, route}) {
 
   const load = async () => {
     setRefreshing(true);
-    const ids = JSON.parse((await AsyncStorage.getItem('myPots')) || '[]');
-    const results = [];
-    for (const id of ids) {
-      try { results.push(await getPot(id)); } catch (e) {}
-    }
-    setPots(results);
+    try {
+      const ids = JSON.parse((await AsyncStorage.getItem('myPots')) || '[]');
+      setMyIds(ids);
+      const f = await getFeed();
+      setFeed(f);
+    } catch (e) {}
     setRefreshing(false);
   };
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
+  const fmtLeft = (ms) => {
+    if (ms <= 0) return 'closing';
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+  };
+
+  const PotCard = ({item, kind}) => (
+    <TouchableOpacity style={st.card} onPress={() => navigation.navigate('PotDetail', {potId: item.id})}>
+      {item.rule_text ? <Text style={st.cardRule}>{item.rule_text}</Text> : <Text style={st.potId}>#{item.id}</Text>}
+      <View style={st.potRow}>
+        <Text style={st.pot}>{(+((item.stake_lamports * item.memberCount) / 1e9).toFixed(4))} <Text style={st.potUnit}>SOL</Text></Text>
+        {kind === 'joinable' && item.fillEndsAt ?
+          <Text style={st.pillUrgent}>{item.activeCount}/3 {'\u00b7'} {fmtLeft(item.fillEndsAt - now)} left</Text> :
+         kind === 'active' ?
+          <Text style={st.pill}>Day {Math.min((item.day || 0) + 1, item.duration_days)}/{item.duration_days}</Text> :
+          <Text style={st.pillOver}>{item.status === 'settled' ? 'POT OVER' : 'ENDED'}</Text>}
+      </View>
+      {item.slots && item.slots.length > 0 ? (
+        <Text style={st.slotsLine}>{item.slots.map(mins => String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0')).join('  ')} {'\u00b7'} {item.duration_days}d</Text>
+      ) : <Text style={st.slotsLine}>{item.duration_days} days {'\u00b7'} check in daily</Text>}
+      <Text style={st.metaLine}>{item.activeCount} in{kind === 'joinable' ? '  \u00b7  stake ' + (item.stake_lamports/1e9) + ' SOL to join' : ''}</Text>
+    </TouchableOpacity>
+  );
+
+  const Section = ({title, data, kind}) => data.length > 0 ? (
+    <View style={{marginBottom: 8}}>
+      <Text style={st.secTitle}>{title}</Text>
+      {data.map(item => <PotCard key={item.id} item={item} kind={kind} />)}
+    </View>
+  ) : null;
+
+  const mineJoinable = feed.joinable.filter(p => myIds.includes(p.id));
+  const mineActive = feed.active.filter(p => myIds.includes(p.id));
+  const mineFinished = feed.finished.filter(p => myIds.includes(p.id));
+  const showMine = mineJoinable.length + mineActive.length + mineFinished.length > 0;
+
   return (
     <View style={st.wrap}>
       <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14}}>
-        <Text style={st.title}>My Pots</Text>
+        <Text style={st.title}>StakeStreak</Text>
         <TouchableOpacity onPress={() => navigation.navigate('HowItWorks')}><Text style={{fontSize: 20, color: C.textDim}}>{'\u2754'}</Text></TouchableOpacity>
       </View>
+
+      <View style={st.tabs}>
+        <TouchableOpacity style={[st.tab, tab === 'discover' && st.tabOn]} onPress={() => setTab('discover')}>
+          <Text style={[st.tabText, tab === 'discover' && st.tabTextOn]}>Discover</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.tab, tab === 'mine' && st.tabOn]} onPress={() => setTab('mine')}>
+          <Text style={[st.tabText, tab === 'mine' && st.tabTextOn]}>My Pots</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={st.joinRow}>
         <TextInput style={st.joinInput} value={code} onChangeText={setCode} placeholder="Have an invite code?" placeholderTextColor={C.textFaint} autoCapitalize="none" />
         <TouchableOpacity style={[st.joinBtn, (joining || !code.trim()) && st.dimmed]} disabled={joining || !code.trim()} onPress={join}>
           <Text style={st.joinBtnText}>{joining ? '...' : 'Join'}</Text>
         </TouchableOpacity>
       </View>
-      <FlatList
-        data={pots}
-        keyExtractor={p => p.id}
+
+      <ScrollView
+        style={{flex: 1}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={C.orange} />}
-        ListEmptyComponent={<Text style={st.empty}>No pots yet.{'\n'}Create one, invite friends,{'\n'}check in daily, survive to win {'\uD83D\uDD25'}</Text>}
-        renderItem={({item}) => (
-          <TouchableOpacity style={st.card} onPress={() => navigation.navigate('PotDetail', {potId: item.id})}>
-            {item.rule_text ? <Text style={st.cardRule}>{item.rule_text}</Text> : <Text style={st.potId}>#{item.id}</Text>}
-            <View style={st.potRow}>
-              <Text style={st.pot}>{(+((item.stake_lamports * item.members.length) / 1e9).toFixed(4))} <Text style={st.potUnit}>SOL</Text></Text>
-              {(() => {
-                const filling = item.status === 'open' || (item.status === 'running' && !item.locked);
-                if (item.status === 'settled') return <Text style={st.pillOver}>POT OVER</Text>;
-                if (item.status === 'dead') return <Text style={st.pillOver}>REFUNDED</Text>;
-                if (filling && item.fillEndsAt) {
-                  const ms = item.fillEndsAt - now;
-                  if (ms > 0) { const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000); return <Text style={st.pillUrgent}>{(item.activeCount||item.members.length)}/3 {'\u00b7'} {h}h {m}m</Text>; }
-                  return <Text style={st.pill}>locking...</Text>;
-                }
-                return <Text style={st.pill}>Day {Math.min((item.day||0)+1, item.duration_days)}/{item.duration_days}</Text>;
-              })()}
-            </View>
-            <Text style={st.flames}>{item.day !== null && item.status==='running' ? '\uD83D\uDD25'.repeat(Math.min(item.day + 1, 14)) + '\u26AA'.repeat(Math.max(0, Math.min(item.duration_days, 14) - item.day - 1)) : ''}</Text>
-            <Text style={st.meta}>{item.members.filter(m => m.status === 'active').length} alive {'\u00b7'} {item.members.filter(m => m.status === 'eliminated').length} cooked {'\uD83D\uDC80'}</Text>
-          </TouchableOpacity>
+        contentContainerStyle={{paddingBottom: 90}}>
+        {tab === 'discover' ? (
+          (feed.joinable.length + feed.active.length + feed.finished.length) === 0 ? (
+            <Text style={st.empty}>No pots yet.{'\n'}Be the first {'\u2014'} create one below {'\uD83D\uDD25'}</Text>
+          ) : (
+            <>
+              <Section title="OPEN TO JOIN" data={feed.joinable} kind="joinable" />
+              <Section title="IN PROGRESS" data={feed.active} kind="active" />
+              <Section title="PAST POTS" data={feed.finished} kind="finished" />
+            </>
+          )
+        ) : (
+          !showMine ? (
+            <Text style={st.empty}>You haven't joined any pots yet.{'\n'}Tap Discover to find one {'\uD83D\uDD25'}</Text>
+          ) : (
+            <>
+              <Section title="YOUR OPEN POTS" data={mineJoinable} kind="joinable" />
+              <Section title="YOUR ACTIVE POTS" data={mineActive} kind="active" />
+              <Section title="YOUR PAST POTS" data={mineFinished} kind="finished" />
+            </>
+          )
         )}
-      />
+      </ScrollView>
+
       <TouchableOpacity style={st.cta} onPress={() => navigation.navigate('CreatePot')}>
         <Text style={st.ctaText}>+ NEW POT</Text>
       </TouchableOpacity>
@@ -110,24 +159,30 @@ export default function PotListScreen({navigation, route}) {
 
 const st = StyleSheet.create({
   wrap: {flex: 1, backgroundColor: C.bg, padding: 16, paddingTop: 20},
-  title: {color: C.text, fontSize: 28, fontWeight: '900'},
+  title: {color: C.text, fontSize: 26, fontWeight: '900'},
+  tabs: {flexDirection: 'row', gap: 8, marginBottom: 14},
+  tab: {flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.cardEdge, borderRadius: 14, paddingVertical: 10, alignItems: 'center'},
+  tabOn: {backgroundColor: C.orange, borderColor: C.orange},
+  tabText: {color: C.textDim, fontWeight: '800', fontSize: 14},
+  tabTextOn: {color: C.text},
   joinRow: {flexDirection: 'row', marginBottom: 16, gap: 8},
   joinInput: {flex: 1, backgroundColor: C.card, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, color: C.text, borderWidth: 1, borderColor: C.cardEdge},
   joinBtn: {backgroundColor: C.orange, borderRadius: 16, paddingHorizontal: 22, justifyContent: 'center'},
   joinBtnText: {color: C.text, fontWeight: '900'},
   dimmed: {opacity: 0.4},
   empty: {color: C.textDim, marginTop: 50, textAlign: 'center', fontSize: 15, lineHeight: 24},
+  secTitle: {color: C.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginTop: 12, marginBottom: 8},
   card: {backgroundColor: C.card, borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: C.cardEdge},
   cardRule: {color: C.text, fontWeight: '900', fontSize: 17, marginBottom: 6},
   potId: {color: C.orange, fontWeight: '800', fontSize: 15, marginBottom: 6},
   potRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  pot: {color: C.gold, fontSize: 28, fontWeight: '900'},
+  pot: {color: C.gold, fontSize: 26, fontWeight: '900'},
   potUnit: {fontSize: 14, color: C.gold},
   pill: {color: C.textDim, fontSize: 13, fontWeight: '800'},
   pillUrgent: {color: C.orangeLt, fontSize: 13, fontWeight: '900'},
   pillOver: {color: C.textDim, fontSize: 13, fontWeight: '900', letterSpacing: 0.5},
-  flames: {fontSize: 14, marginTop: 8, letterSpacing: 1},
-  meta: {color: C.textDim, marginTop: 6, fontSize: 13, fontWeight: '700'},
-  cta: {backgroundColor: C.orange, borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 8},
+  slotsLine: {color: C.orangeLt, fontSize: 13, fontWeight: '700', marginTop: 8},
+  metaLine: {color: C.textDim, fontSize: 12, fontWeight: '700', marginTop: 4},
+  cta: {position: 'absolute', left: 16, right: 16, bottom: 16, backgroundColor: C.orange, borderRadius: 20, padding: 16, alignItems: 'center'},
   ctaText: {color: C.text, fontWeight: '900', fontSize: 16},
 });
