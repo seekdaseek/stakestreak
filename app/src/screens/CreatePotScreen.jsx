@@ -46,15 +46,15 @@ export default function CreatePotScreen({navigation}) {
       try {
         await joinPot(pot.potId, dep.payer, dep.sig, -new Date().getTimezoneOffset());
       } catch (je) {
-        const dbg = je.response?.data?.debug;
-        toast('JOIN FAILED', 'sig sent: ' + String(sig).slice(0,12) + '... | ' + (dbg ? ('want ' + (dbg.want_min/1e9) + ' to ' + String(dbg.want_dest).slice(0,6) + ' | got: ' + JSON.stringify(dbg.actual)) : (je.response?.data?.error || je.message)), 'error');
+        const msg = je.response?.data?.refunded ? ('Your ' + je.response.data.refunded + ' SOL was refunded. Try again.') : (je.response?.data?.error || je.message);
+        toast('Deposit not credited', msg, 'error');
         setBusy(false);
         return;
       }
       const ids = JSON.parse((await AsyncStorage.getItem('myPots')) || '[]');
       ids.unshift(pot.potId);
       await AsyncStorage.setItem('myPots', JSON.stringify(ids));
-      await Share.share({message: '"' + rule.trim() + '" \u2014 stake ' + stake + ' SOL, survive ' + days + ' days, split the quitters\u2019 stakes. Join: https://seekdaseek.github.io/stakestreak/join.html?p=' + pot.potId});
+      toast('You\u2019re in! ' + stake + ' SOL staked', 'Refunded if the pot doesn\u2019t fill (needs 3 players). Invite friends to lock it in.', 'win');
       navigation.replace('PotDetail', {potId: pot.potId});
     } catch (e) {
       toast('Couldn\'t create pot', e.response?.data?.error || e.message, 'error');
