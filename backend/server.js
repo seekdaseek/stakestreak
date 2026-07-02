@@ -4,9 +4,51 @@ const bs58 = require('bs58').default;
 const fs = require('fs');
 const crypto = require('crypto');
 const db = require('./db');
+let fcm = null;
+try {
+  const { initializeApp, cert } = require('firebase-admin/app');
+  const { getMessaging } = require('firebase-admin/messaging');
+  initializeApp({ credential: cert(require('./serviceAccount.json')) });
+  fcm = getMessaging();
+  console.log('FCM initialized (modular)');
+} catch (e) { console.log('FCM init skipped:', e.message); }
 
 const app = express();
 app.use(express.json());
+db.prepare('CREATE TABLE IF NOT EXISTS notify_tokens (token TEXT PRIMARY KEY, wallet TEXT, created_at INTEGER)').run();
+
+// register a device for new-pot pushes
+app.post('/notify/register', (req, res) => {
+  const { token, wallet } = req.body;
+  if (!token) return res.status(400).json({ error: 'token required' });
+  db.prepare('INSERT OR REPLACE INTO notify_tokens (token, wallet, created_at) VALUES (?,?,?)').run(token, wallet || null, Date.now());
+  res.json({ ok: true });
+});
+app.post('/notify/unregister', (req, res) => {
+  const { token } = req.body;
+  if (token) db.prepare('DELETE FROM notify_tokens WHERE token=?').run(token);
+  res.json({ ok: true });
+});
+
+// fire a new-pot push to all registered devices (fire-and-forget, prunes dead tokens)
+async function pushNewPot(pot) {
+  if (!fcm) return;
+  const tokens = db.prepare('SELECT token FROM notify_tokens').all().map(r => r.token);
+  if (!tokens.length) return;
+  const stake = pot.stake_lamports / 1e9;
+  const title = '\uD83D\uDD25 New StakeStreak pot';
+  const body = (pot.rule_text ? pot.rule_text + ' \u2014 ' : '') + stake + ' SOL. Tap to join before it fills.';
+  const dead = [];
+  for (const t of tokens) {
+    try {
+      await fcm.send({ token: t, notification: { title, body }, data: { potId: String(pot.id) } });
+    } catch (e) {
+      if (String(e.message).includes('not a valid FCM') || String(e.code||'').includes('registration-token-not-registered')) dead.push(t);
+    }
+  }
+  for (const t of dead) db.prepare('DELETE FROM notify_tokens WHERE token=?').run(t);
+  if (dead.length) console.log('pruned', dead.length, 'dead FCM tokens');
+}
 
 const RPC = process.env.RPC || 'https://api.devnet.solana.com';
 const conn = new Connection(RPC, 'confirmed');
@@ -75,6 +117,7 @@ app.post('/pot', (req, res) => {
   }
   db.prepare('INSERT INTO pots (id, creator, stake_lamports, duration_days, rule_text, max_members, created_at, checkin_slots) VALUES (?,?,?,?,?,?,?,?)')
     .run(id, creator, Math.round(stakeSol * 1e9), durationDays, rule, maxMembers||null, Date.now(), slotsJson);
+  pushNewPot({ id, rule_text: rule, stake_lamports: Math.round(stakeSol * 1e9) }).catch(e => console.log('push error:', e.message));
   res.json({ potId: id, depositTo: treasury.publicKey.toBase58() });
 });
 

@@ -29,3 +29,9 @@ export const getFeed = () =>
 
 export const refundPot = (potId, wallet) =>
   api.post('/pot/' + potId + '/refund', { wallet }).then(r => r.data);
+
+export const registerNotify = (token, wallet) =>
+  api.post('/notify/register', { token, wallet }).then(r => r.data);
+
+export const unregisterNotify = (token) =>
+  api.post('/notify/unregister', { token }).then(r => r.data);

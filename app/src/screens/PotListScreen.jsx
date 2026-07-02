@@ -2,7 +2,7 @@ import React, {useState, useCallback, useEffect} from 'react';
 import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, TextInput} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {getPot, joinPot, getFeed} from '../services/api';
+import {getPot, joinPot, getFeed, registerNotify, unregisterNotify} from '../services/api';
 import {getSavedWallet, depositToTreasury} from '../services/wallet';
 import {useToast} from '../components/Toast';
 import {C} from '../theme';
@@ -15,8 +15,33 @@ export default function PotListScreen({navigation, route}) {
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [notifyOn, setNotifyOn] = useState(false);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const toast = useToast();
+
+  useEffect(() => { (async () => {
+    const pref = await AsyncStorage.getItem('notifyNewPots');
+    setNotifyOn(pref === '1');
+  })(); }, []);
+
+  const toggleNotify = async () => {
+    try {
+      const token = await AsyncStorage.getItem('fcmToken');
+      if (!token) { toast('Notifications unavailable', 'Allow notifications for StakeStreak in your phone settings, then reopen the app.', 'error'); return; }
+      if (!notifyOn) {
+        const wallet = await getSavedWallet();
+        await registerNotify(token, wallet);
+        await AsyncStorage.setItem('notifyNewPots', '1');
+        setNotifyOn(true);
+        toast('You\u2019re subscribed \uD83D\uDD14', 'We\u2019ll ping you when a new pot opens to join.', 'win');
+      } else {
+        await unregisterNotify(token);
+        await AsyncStorage.setItem('notifyNewPots', '0');
+        setNotifyOn(false);
+        toast('Notifications off', 'You won\u2019t get new-pot alerts.', 'info');
+      }
+    } catch (e) { toast('Hmm', e.response?.data?.error || e.message, 'error'); }
+  };
 
   useEffect(() => {
     const p = route.params?.p;
@@ -107,6 +132,10 @@ export default function PotListScreen({navigation, route}) {
         <TouchableOpacity onPress={() => navigation.navigate('HowItWorks')}><Text style={{fontSize: 20, color: C.textDim}}>{'\u2754'}</Text></TouchableOpacity>
       </View>
 
+      <TouchableOpacity style={[st.notify, notifyOn && st.notifyOn]} onPress={toggleNotify}>
+        <Text style={[st.notifyText, notifyOn && st.notifyTextOn]}>{notifyOn ? '\uD83D\uDD14  Alerts on \u2014 tap to turn off' : '\uD83D\uDD14  Notify me when new pots drop'}</Text>
+      </TouchableOpacity>
+
       <View style={st.tabs}>
         <TouchableOpacity style={[st.tab, tab === 'discover' && st.tabOn]} onPress={() => setTab('discover')}>
           <Text style={[st.tabText, tab === 'discover' && st.tabTextOn]}>Discover</Text>
@@ -161,6 +190,10 @@ const st = StyleSheet.create({
   wrap: {flex: 1, backgroundColor: C.bg, padding: 16, paddingTop: 20},
   title: {color: C.text, fontSize: 26, fontWeight: '900'},
   tabs: {flexDirection: 'row', gap: 8, marginBottom: 14},
+  notify: {backgroundColor: C.card, borderWidth: 1, borderColor: C.cardEdge, borderRadius: 14, paddingVertical: 11, alignItems: 'center', marginBottom: 12},
+  notifyOn: {backgroundColor: C.orangeBg, borderColor: C.orange},
+  notifyText: {color: C.textDim, fontWeight: '800', fontSize: 13},
+  notifyTextOn: {color: C.orangeLt},
   tab: {flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.cardEdge, borderRadius: 14, paddingVertical: 10, alignItems: 'center'},
   tabOn: {backgroundColor: C.orange, borderColor: C.orange},
   tabText: {color: C.textDim, fontWeight: '800', fontSize: 14},
