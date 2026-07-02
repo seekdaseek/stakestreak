@@ -1,8 +1,9 @@
-import React from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert} from 'react-native';
+import React, {useState} from 'react';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet} from 'react-native';
 import axios from 'axios';
 import {getSavedWallet, disconnectWallet} from '../services/wallet';
 import {useToast} from '../components/Toast';
+import ConfirmModal from '../components/ConfirmModal';
 
 const STEPS = [
   ['\uD83C\uDFC6', 'Create a pot', 'Pick a stake (in SOL) and a duration. Everyone puts in the same amount. It is held in escrow until the pot ends.'],
@@ -21,24 +22,22 @@ const SAMPLES = [
 export default function HowItWorksScreen({navigation}) {
   const toast = useToast();
 
-  const deleteAccount = () => {
-    Alert.alert('Delete account?', 'This removes your check-in history and finished-pot records from our servers. On-chain transactions are permanent. You cannot delete while in a running pot.', [
-      {text: 'Cancel'},
-      {text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          const wallet = await getSavedWallet();
-          await axios.post('http://167.233.69.154/stakestreak/account/delete', {wallet});
-          await disconnectWallet();
-          toast('Account deleted', 'Your off-chain data has been removed.');
-          navigation.reset({index: 0, routes: [{name: 'Connect'}]});
-        } catch (e) {
-          toast('Cannot delete', e.response?.data?.error || e.message, 'error');
-        }
-      }},
-    ]);
+  const [showDelete, setShowDelete] = useState(false);
+  const doDelete = async () => {
+    setShowDelete(false);
+    try {
+      const wallet = await getSavedWallet();
+      await axios.post('http://167.233.69.154/stakestreak/account/delete', {wallet});
+      await disconnectWallet();
+      toast('Account deleted', 'Your off-chain data has been removed.');
+      navigation.reset({index: 0, routes: [{name: 'Connect'}]});
+    } catch (e) {
+      toast('Cannot delete', e.response?.data?.error || e.message, 'error');
+    }
   };
 
   return (
+    <>
     <ScrollView style={st.wrap} contentContainerStyle={{paddingBottom: 40}}>
       {STEPS.map(([emoji, title, body], i) => (
         <View key={i} style={st.card}>
@@ -67,10 +66,22 @@ export default function HowItWorksScreen({navigation}) {
         <Text style={st.moreText}>More from ochinimus →</Text>
       </TouchableOpacity>
       <Text style={st.legal}>StakeStreak is a skill-based accountability challenge. Outcomes depend entirely on your own daily actions. Only stake what you can afford to lose, and make sure participation is lawful where you live.</Text>
-      <TouchableOpacity style={st.del} onPress={deleteAccount}>
+      <TouchableOpacity style={st.del} onPress={() => setShowDelete(true)}>
         <Text style={st.delText}>Delete my account & data</Text>
       </TouchableOpacity>
     </ScrollView>
+    <ConfirmModal
+      visible={showDelete}
+      emoji={"⚠️"}
+      title="Delete account?"
+      message="This removes your check-in history and finished-pot records from our servers. On-chain transactions are permanent. You cannot delete while in a running pot."
+      cancelText="Cancel"
+      onCancel={() => setShowDelete(false)}
+      confirmText="Delete"
+      destructive
+      onConfirm={doDelete}
+    />
+    </>
   );
 }
 
