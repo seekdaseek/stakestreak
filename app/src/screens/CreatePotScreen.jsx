@@ -1,12 +1,14 @@
 import React, {useState} from 'react';
-import {View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Share, ScrollView} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, StyleSheet, Share, ScrollView} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {createPot, joinPot, startPot} from '../services/api';
 import {getSavedWallet, depositToTreasury} from '../services/wallet';
 import {useToast} from '../components/Toast';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function CreatePotScreen({navigation}) {
   const [rule, setRule] = useState('');
+  const [showSlotConfirm, setShowSlotConfirm] = useState(false);
   const [stake, setStake] = useState('0.1');
   const [days, setDays] = useState('7');
   const [slots, setSlots] = useState([]); // minutes-into-day, up to 4
@@ -37,17 +39,7 @@ export default function CreatePotScreen({navigation}) {
 
   const create = () => {
     if (!rule.trim()) { toast('Add a rule', 'What must players do each day?', 'error'); return; }
-    if (slots.length === 0) {
-      Alert.alert(
-        'No check-in times set',
-        'This will be an ANYTIME pot \u2014 players check in once per day, any time. If you meant to set specific times (like 6:00am), go back and tap "+ Add" after picking the time.',
-        [
-          {text: 'Add times', style: 'cancel'},
-          {text: 'Use anytime', onPress: () => doCreate()},
-        ]
-      );
-      return;
-    }
+    if (slots.length === 0) { setShowSlotConfirm(true); return; }
     doCreate();
   };
 
@@ -78,6 +70,7 @@ export default function CreatePotScreen({navigation}) {
   };
 
   return (
+    <>
     <ScrollView style={st.scroll} contentContainerStyle={st.wrap} keyboardShouldPersistTaps="handled">
       <Text style={st.title}>New Pot</Text>
       <Text style={st.label}>The rule (what must players do daily?)</Text>
@@ -134,6 +127,17 @@ export default function CreatePotScreen({navigation}) {
         <Text style={st.ctaText}>{busy ? 'Creating...' : 'Stake & Create'}</Text>
       </TouchableOpacity>
     </ScrollView>
+    <ConfirmModal
+      visible={showSlotConfirm}
+      emoji={"⏰"}
+      title="No check-in times set"
+      message="This will be an anytime pot — players check in once per day, any time. To set specific times like 6:00am, go back and tap + Add after picking a time."
+      cancelText="Add times"
+      onCancel={() => setShowSlotConfirm(false)}
+      confirmText="Use anytime"
+      onConfirm={() => { setShowSlotConfirm(false); doCreate(); }}
+    />
+    </>
   );
 }
 

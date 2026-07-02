@@ -27,10 +27,10 @@ export function ToastProvider({children}) {
 }
 
 const st = StyleSheet.create({
-  backdrop: {flex: 1, backgroundColor: 'rgba(43,33,24,0.45)', alignItems: 'center', justifyContent: 'center', padding: 32},
-  card: {backgroundColor: '#FFFFFF', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%', elevation: 12},
+  backdrop: {flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 32},
+  card: {backgroundColor: '#241A15', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%', borderWidth: 1, borderColor: '#3A2E24', elevation: 12},
   emoji: {fontSize: 44, marginBottom: 8},
-  title: {fontSize: 20, fontWeight: '800', color: '#2B2118', textAlign: 'center'},
+  title: {fontSize: 20, fontWeight: '800', color: '#FFFFFF', textAlign: 'center'},
   msg: {fontSize: 15, color: '#8A7E72', textAlign: 'center', marginTop: 8, lineHeight: 21},
   btn: {backgroundColor: '#FF5A36', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 40, marginTop: 20},
   btnText: {color: '#FFFFFF', fontWeight: '800', fontSize: 16},
