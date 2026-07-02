@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "^1.23.1",
     "@react-native-firebase/app": "^24.1.0",
     "@react-native-firebase/messaging": "^24.1.0",
