@@ -80,8 +80,8 @@ android {
         applicationId "com.stakestreak.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 17
-        versionName "1.0"
+        versionCode 19
+        versionName "1.0.1"
     }
     signingConfigs {
         debug {
@@ -91,10 +91,13 @@ android {
             keyPassword 'android'
         }
         release {
+            // Password from $GRADLE_USER_HOME/gradle.properties
+            // (STAKESTREAK_UPLOAD_STORE_PASSWORD), else the KEYSTORE_PASSWORD env var.
+            def ssPw = findProperty('STAKESTREAK_UPLOAD_STORE_PASSWORD') ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
             storeFile file('stakestreak-release.keystore')
-            storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+            storePassword ssPw
             keyAlias 'stakestreak'
-            keyPassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyPassword ssPw
         }
     }
 
