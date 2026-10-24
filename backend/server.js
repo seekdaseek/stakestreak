@@ -101,14 +101,15 @@ app.post('/pot', (req, res) => {
   if (!creator || !stakeSol || !durationDays) return res.status(400).json({ error: 'missing fields' });
   if (durationDays < 2 || durationDays > 90) return res.status(400).json({ error: 'duration 2-90 days' });
   if (stakeSol < 0.01) return res.status(400).json({ error: 'min stake 0.01 SOL' });
-  if (!ruleText || !String(ruleText).trim()) return res.status(400).json({ error: 'rule required' });
+  // rule required for new-app UX, but default gracefully so older clients never break
+  const _ruleClean = (ruleText && String(ruleText).trim()) ? String(ruleText).trim() : 'Check in daily';
   const win = (checkinStartMin != null || checkinEndMin != null);
   if (win) {
     if (checkinStartMin == null || checkinEndMin == null) return res.status(400).json({ error: 'both window bounds required' });
     if (checkinStartMin < 0 || checkinStartMin > 1439 || checkinEndMin < 0 || checkinEndMin > 1439) return res.status(400).json({ error: 'window minutes 0-1439' });
   }
   if (maxMembers != null && (maxMembers < 3 || maxMembers > 100)) return res.status(400).json({ error: 'maxMembers 3-100' });
-  const rule = String(ruleText).trim().slice(0,120);
+  const rule = _ruleClean.slice(0,120);
   const id = crypto.randomBytes(6).toString('hex');
   let slotsJson = null;
   if (Array.isArray(req.body.checkinSlots) && req.body.checkinSlots.length) {
