@@ -61,5 +61,5 @@ test('R20 wiring: server.js builds its Connection through the failover (source c
 
 test('R20 helper pin: rpc-failover.cjs is byte-identical to AgentFeed lib/rpc-failover.cjs and the copies in seeker-rpc and the other backend', () => {
   const sha = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'rpc-failover.cjs'))).digest('hex');
-  assert.equal(sha, '7fbd405af89ff2fc07e2d504db4cb600f3ffad439a9ab21f1e40b03f4609b208', 'if you changed the helper, change it in all four places and update the four pins');
+  assert.equal(sha, 'd5fc1443848c865c9215a7ec2ccdccd0b7350836570cee2c55739baec5ac7666', 'if you changed the helper, change it in all four places and update the four pins');
 });
