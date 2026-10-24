@@ -51,7 +51,14 @@ async function pushNewPot(pot) {
 }
 
 const RPC = process.env.RPC || 'https://api.devnet.solana.com';
-const conn = new Connection(RPC, 'confirmed');
+// R20 (24 Oct 2026): RPC (env, baked into the PM2 entry) is a Helius URL; unset it is devnet. The free Helius plan ran out of credits (23 Oct to 9 Nov), which would fail every payment check. Every RPC call of this
+// backend now goes through rpc-failover.cjs (one file, shared with AgentFeed, seeker-rpc and the other backend; rpc-failover.test.cjs pins its sha256): the
+// primary first; on HTTP 429, 402, 401, 403, 5xx, a dropped connection or a timeout the same call goes to RPC_FALLBACKS (default: the free public mainnet
+// RPC) and the primary rests for 10 minutes. A devnet primary gets no fallback. Calls are counted: one `rpc_usage` line every 10 minutes (hosts only).
+const rpcFailover = require('./rpc-failover.cjs');
+const rpcEndpoints = rpcFailover.create({ name: 'stakestreak', primary: RPC, fallbacks: rpcFailover.parseFallbacks(process.env.RPC_FALLBACKS), log: (l) => console.log(l), timeoutMs: 15_000 });
+rpcEndpoints.startUsageLog();
+const conn = new Connection(RPC, { commitment: 'confirmed', fetch: rpcEndpoints.fetch });
 async function getTxWithRetry(sig, tries = 5, delayMs = 2000) {
   for (let i = 0; i < tries; i++) {
     const tx = await conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 });
